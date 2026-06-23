@@ -11,9 +11,9 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		1647FB512FC5E93900D15B65 /* ThyroCare */ = {
+		162A86652FEA0D0A007DFD68 /* Mobile_App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = ThyroCare;
+			path = Mobile_App;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -32,8 +32,8 @@
 		1647FB462FC5E93900D15B65 = {
 			isa = PBXGroup;
 			children = (
-				1647FB512FC5E93900D15B65 /* ThyroCare */,
 				1647FB502FC5E93900D15B65 /* Products */,
+				162A86652FEA0D0A007DFD68 /* Mobile_App */,
 			);
 			sourceTree = "<group>";
 		};
@@ -61,7 +61,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				1647FB512FC5E93900D15B65 /* ThyroCare */,
+				162A86652FEA0D0A007DFD68 /* Mobile_App */,
 			);
 			name = ThyroCare;
 			packageProductDependencies = (
