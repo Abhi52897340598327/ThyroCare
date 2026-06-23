@@ -6,7 +6,21 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5%2B-3178C6.svg)](#tech-stack)
 [![License](https://img.shields.io/badge/license-MIT-0f766e.svg)](#license)
 
-ThyroCare is an end-to-end clinical telemetry and diagnostic engine built for the Congressional App Challenge. The system combines native iOS intake, deterministic severity modeling, real-time Firestore synchronization, and a physician-facing clinical dashboard.
+ThyroCare is an end-to-end clinical telemetry and diagnostic engine built for the Congressional App Challenge. It addresses latency in endocrine management by converting adherence behavior, dietary disruptors, biometric context, and lab baselines into real-time clinical telemetry.
+
+## Problem Statement
+
+### The Clinical Gap
+
+Endocrine management, specifically Levothyroxine adherence, suffers from a critical latency problem. Because thyroid metabolism relies on highly sensitive pharmacokinetics, hidden dietary disruptors such as unmeasured calcium, iron, or soy, and erratic medication timing can silently derail a patient's baseline weeks before the next endocrinologist visit.
+
+Current patient data collection is severely fragmented and relies on high-friction manual logging. This leaves providers blind to a patient's biological momentum and reacting to outdated laboratory panels rather than real-time physiological trends.
+
+### The ThyroCare Architecture
+
+ThyroCare engineers a continuous, low-friction telemetry pipeline to eliminate this clinical blind spot. The native iOS client acts as a patient-side biometric sensor node, using a Vision-Language Model for heuristic dietary risk analysis and natural language processing for frictionless habit logging.
+
+This data is processed through a deterministic Shannon Entropy-Weighted TOPSIS diagnostic engine, trained on clinical datasets, to synthesize a real-time geometric severity score. Through an enterprise-grade Next.js clinical dashboard, providers receive instantaneous visibility into patient risk progression, predictive metabolic trendlines, and actionable telemetry events, transforming retrospective thyroid management into proactive care.
 
 ## System Architecture
 
