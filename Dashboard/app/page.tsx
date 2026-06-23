@@ -182,8 +182,10 @@ export default function DashboardPage() {
       });
 
       if (!response.ok) {
-        const body = await response.json();
-        throw new Error(body.error ?? "Mock payload rejected");
+        const body = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(body?.error ?? "Mock payload rejected");
       }
 
       setIngestStatus(`Accepted telemetry for ${payload.patient_id}`);
