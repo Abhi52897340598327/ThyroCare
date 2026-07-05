@@ -19,7 +19,9 @@ struct MainTabView: View {
             }
             
             Tab(Constants.questionaireString, systemImage: Constants.questionaireImage, value: AppTab.MainTab.questionaire) {
-                QuestionairePage()
+                NavigationStack {
+                    QuestionairePage()
+                }
             }
 
             Tab(Constants.summaryString, systemImage: Constants.summaryImage, value: AppTab.MainTab.summary) {
@@ -37,7 +39,9 @@ struct MainTabView: View {
             }
 
             Tab(Constants.pictureString, systemImage: Constants.pictureImage, value: AppTab.MainTab.picture) {
-                PicturePage()
+                NavigationStack {
+                    PicturePage()
+                }
             }
         }
     }

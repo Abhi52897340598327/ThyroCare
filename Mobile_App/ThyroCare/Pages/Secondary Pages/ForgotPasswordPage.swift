@@ -1,27 +1,34 @@
-//
-//  ForgotPasswordPage.swift
-//  ThyroCare
-//
-//  Created by Abhiraam Venigalla on 6/13/26.
-//
-
 import SwiftUI
 
 struct ForgotPasswordPage: View {
     @State private var email = ""
+    @State private var sentCode = false
+
     var body: some View {
-        VStack {
-            ThyroCareLogo(width: Constants.logoWidth, height: Constants.logoHeight)
-            Text(Constants.forgotPasswordInstructions)
-                .padding()
-                .multilineTextAlignment(.center)
-            OpenTextField(title: Constants.emailString, text: $email)
-                .contentMargins(25)
-                .padding()
-            LandingButton(title: "Send email") {
-                // TODO: Connect password reset flow.
+        ThyroPageScaffold(title: "Forgot Password?") {
+            ThyroCard {
+                ThyroidVectorArt()
+                    .frame(maxWidth: .infinity)
+
+                ThyroSectionTitle("Reset access", subtitle: Constants.forgotPasswordInstructions)
+
+                OpenTextField(title: Constants.emailString, text: $email)
+
+                LandingButton(title: "Send email") {
+                    withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
+                        sentCode = true
+                    }
+                }
             }
-            .padding(.horizontal, 36)
+
+            if sentCode {
+                ThyroCard {
+                    ThyroSectionTitle("Check your inbox")
+                    Text("A verification code has been prepared for the next step.")
+                        .foregroundStyle(.secondary)
+                }
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
         }
     }
 }

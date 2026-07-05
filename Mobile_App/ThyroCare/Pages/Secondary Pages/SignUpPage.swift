@@ -1,10 +1,3 @@
-//
-//  SignUpPage.swift
-//  ThyroCare
-//
-//  Created by Abhiraam Venigalla on 5/30/26.
-//
-
 import SwiftUI
 
 struct SignUpPage: View {
@@ -13,48 +6,35 @@ struct SignUpPage: View {
     @State private var username = ""
     @State private var password = ""
     @State private var email = ""
-    
+
     var body: some View {
-        ZStack {
-            Color.white
-                .ignoresSafeArea()
+        ThyroPageScaffold(title: Constants.signUpString) {
+            ThyroCard {
+                ThyroidVectorArt()
+                    .frame(maxWidth: .infinity)
 
-            VStack(spacing: 28) {
-                Spacer()
+                ThyroSectionTitle("Create Account", subtitle: "Set up your ThyroCare profile before starting the questionnaire.")
 
-                ThyroCareLogo(width: 260, height: 260)
+                OpenTextField(title: Constants.usernameString, text: $username)
 
-                Text(Constants.signUpString)
-                    .font(.system(size: 34, weight: .semibold))
-                    .foregroundStyle(.black)
+                SecureField(Constants.passwordString, text: $password)
+                    .padding()
+                    .background(ThyroUI.softGray)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
 
-                VStack(spacing: 18) {
-                    OpenTextField(title: Constants.usernameString, text: $username)
-
-                    SecureField(Constants.passwordString, text: $password)
-                        .padding()
-                        .background(Color.gray.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                    
-                    OpenTextField(title: Constants.emailString, text: $email)
-                }
-                .padding(.horizontal, 36)
+                OpenTextField(title: Constants.emailString, text: $email)
 
                 if !authManager.accountMessage.isEmpty {
                     Text(authManager.accountMessage)
                         .font(.footnote)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(ThyroUI.coral)
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal, 36)
+                        .frame(maxWidth: .infinity)
                 }
 
                 LandingButton(title: Constants.createAccountString) {
                     authManager.signUp(username: username, email: email, password: password)
                 }
-                .padding(.horizontal, 36)
-                .padding(.top, 12)
-
-                Spacer()
             }
         }
     }

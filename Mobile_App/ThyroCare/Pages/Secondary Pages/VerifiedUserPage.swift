@@ -1,12 +1,3 @@
-//
-//  VerifiedUserPage.swift
-//  ThyroCare
-//
-//  Created by Abhiraam Venigalla on 5/30/26.
-//
-
-// basically page without the login or signup option
-
 import SwiftUI
 
 struct VerifiedUserPage: View {
@@ -17,28 +8,30 @@ struct VerifiedUserPage: View {
     }
 
     var body: some View {
-        ZStack {
-            Color.white
-                .ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                Spacer(minLength: 70)
-
-                ThyroCareLogo(width: 260, height: 260)
+        ThyroPageScaffold {
+            VStack(spacing: 18) {
+                ThyroidVectorArt()
+                    .frame(maxWidth: .infinity)
 
                 Text(Constants.appName)
-                    .font(.system(size: 36, weight: .regular))
-                    .foregroundStyle(.black)
-                    .padding(.top, 28)
+                    .font(.system(size: 38, weight: .bold))
+                    .foregroundStyle(ThyroUI.navy)
+                    .frame(maxWidth: .infinity)
 
-                Spacer(minLength: 80)
+                ThyroCard {
+                    ThyroSectionTitle("Your account is verified", subtitle: "View your dashboard or continue checking in with new data.")
 
-                VStack(spacing: 34) {
+                    HStack(spacing: 14) {
+                        AnimatedMetricRing(title: "Profile", value: 0.92, color: ThyroUI.teal)
+                        VStack(alignment: .leading, spacing: 8) {
+                            MetricRow(title: "Status", value: "Verified", color: ThyroUI.teal)
+                            MetricRow(title: "Dashboard", value: "Ready", color: ThyroUI.amber)
+                            MetricRow(title: "Questionaire", value: "Open", color: ThyroUI.violet)
+                        }
+                    }
+
                     LandingButton(title: Constants.buttonTitles[2], action: onViewDashboard)
                 }
-                .padding(.horizontal, 36)
-
-                Spacer(minLength: 96)
             }
         }
     }

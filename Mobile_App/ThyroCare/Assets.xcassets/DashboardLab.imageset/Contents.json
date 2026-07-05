@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "dashboard-lab.svg",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
