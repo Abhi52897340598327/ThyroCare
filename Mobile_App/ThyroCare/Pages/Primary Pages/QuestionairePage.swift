@@ -18,11 +18,11 @@ struct QuestionairePage: View {
     @State private var frequency = "Daily"
     @State private var protein = 24.0
     @State private var carbs = 38.0
-    @State private var vitaminA = 12.0
-    @State private var vitaminB = 9.0
-    @State private var vitaminD = 7.0
-    @State private var fruits = 22.0
-    @State private var vegetables = 28.0
+    @State private var vitaminA = 8.0
+    @State private var vitaminB = 7.0
+    @State private var vitaminD = 8.0
+    @State private var fruits = 7.0
+    @State private var vegetables = 8.0
     @State private var waitHours = ""
     @State private var takesIronCalcium = false
     @State private var shouldShowPrediction = false
@@ -33,6 +33,16 @@ struct QuestionairePage: View {
     @AppStorage("tshDecrease") private var storedTSHDecrease = 0
     @AppStorage("t3Improvement") private var storedT3Improvement = 0
     @AppStorage("t4Improvement") private var storedT4Improvement = 0
+
+    private enum Nutrient: CaseIterable {
+        case protein
+        case carbs
+        case vitaminA
+        case vitaminB
+        case vitaminD
+        case fruits
+        case vegetables
+    }
 
     private let yesNo = ["Yes", "No"]
     private let sexes = ["Female", "Male", "Intersex", "Prefer not to say"]
@@ -145,16 +155,17 @@ struct QuestionairePage: View {
                         MetricRow(title: "Carbs", value: "\(Int(carbs))%", color: ThyroUI.amber)
                         MetricRow(title: "Vitamins", value: "\(Int(vitaminA + vitaminB + vitaminD))%", color: ThyroUI.violet)
                         MetricRow(title: "Plants", value: "\(Int(fruits + vegetables))%", color: ThyroUI.coral)
+                        MetricRow(title: "Total", value: "\(Int(totalFoodPercent))%", color: ThyroUI.navy)
                     }
                 }
 
-                nutrientSlider("Protein", value: $protein)
-                nutrientSlider("Carbs", value: $carbs)
-                nutrientSlider("Vitamin A", value: $vitaminA)
-                nutrientSlider("Vitamin B", value: $vitaminB)
-                nutrientSlider("Vitamin D", value: $vitaminD)
-                nutrientSlider("Fruits", value: $fruits)
-                nutrientSlider("Vegetables", value: $vegetables)
+                nutrientSlider("Protein", nutrient: .protein)
+                nutrientSlider("Carbs", nutrient: .carbs)
+                nutrientSlider("Vitamin A", nutrient: .vitaminA)
+                nutrientSlider("Vitamin B", nutrient: .vitaminB)
+                nutrientSlider("Vitamin D", nutrient: .vitaminD)
+                nutrientSlider("Fruits", nutrient: .fruits)
+                nutrientSlider("Vegetables", nutrient: .vegetables)
             }
 
             ThyroCard {
@@ -195,17 +206,80 @@ struct QuestionairePage: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
-    private func nutrientSlider(_ title: String, value: Binding<Double>) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+    private var totalFoodPercent: Double {
+        protein + carbs + vitaminA + vitaminB + vitaminD + fruits + vegetables
+    }
+
+    private func nutrientSlider(_ title: String, nutrient: Nutrient) -> some View {
+        let value = nutrientBinding(for: nutrient)
+
+        return VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(title)
                 Spacer()
-                Text("\(Int(value.wrappedValue))%")
+                Text("\(Int(value.wrappedValue.rounded()))%")
                     .fontWeight(.semibold)
             }
             .font(.caption)
             Slider(value: value, in: 0...100, step: 1)
                 .tint(ThyroUI.teal)
+        }
+    }
+
+    private func nutrientBinding(for nutrient: Nutrient) -> Binding<Double> {
+        Binding(
+            get: { nutrientValue(for: nutrient) },
+            set: { updateNutrient(nutrient, to: $0) }
+        )
+    }
+
+    private func nutrientValue(for nutrient: Nutrient) -> Double {
+        switch nutrient {
+        case .protein: protein
+        case .carbs: carbs
+        case .vitaminA: vitaminA
+        case .vitaminB: vitaminB
+        case .vitaminD: vitaminD
+        case .fruits: fruits
+        case .vegetables: vegetables
+        }
+    }
+
+    private func updateNutrient(_ nutrient: Nutrient, to newValue: Double) {
+        let adjustedValue = min(max(newValue.rounded(), 0), 100)
+        setNutrient(nutrient, to: adjustedValue)
+
+        let otherNutrients = Nutrient.allCases.filter { $0 != nutrient }
+        let remainingTotal = 100 - adjustedValue
+        let currentOtherTotal = otherNutrients.map(nutrientValue).reduce(0, +)
+
+        if currentOtherTotal <= 0 {
+            let splitValue = (remainingTotal / Double(otherNutrients.count)).rounded()
+            otherNutrients.forEach { setNutrient($0, to: splitValue) }
+        } else {
+            otherNutrients.forEach { other in
+                let scaledValue = (nutrientValue(for: other) / currentOtherTotal * remainingTotal).rounded()
+                setNutrient(other, to: scaledValue)
+            }
+        }
+
+        let total = Nutrient.allCases.map(nutrientValue).reduce(0, +)
+        let correction = 100 - total
+        if correction != 0, let correctionTarget = otherNutrients.max(by: { nutrientValue(for: $0) < nutrientValue(for: $1) }) {
+            let correctedValue = min(max(nutrientValue(for: correctionTarget) + correction, 0), 100)
+            setNutrient(correctionTarget, to: correctedValue)
+        }
+    }
+
+    private func setNutrient(_ nutrient: Nutrient, to value: Double) {
+        switch nutrient {
+        case .protein: protein = value
+        case .carbs: carbs = value
+        case .vitaminA: vitaminA = value
+        case .vitaminB: vitaminB = value
+        case .vitaminD: vitaminD = value
+        case .fruits: fruits = value
+        case .vegetables: vegetables = value
         }
     }
 
