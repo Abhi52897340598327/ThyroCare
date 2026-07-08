@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+.build/
+.swiftpm/
+DerivedData/
+node_modules/
+Package.resolved
+.DS_Store
