@@ -7,3 +7,9 @@ DerivedData/
 node_modules/
 Package.resolved
 .DS_Store
+
+# Local API keys
+Backend/.env
+Backend/.env.*
+.env
+.env.*
