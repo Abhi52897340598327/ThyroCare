@@ -33,6 +33,7 @@ struct QuestionairePage: View {
     @AppStorage("tshDecrease") private var storedTSHDecrease = 0
     @AppStorage("t3Improvement") private var storedT3Improvement = 0
     @AppStorage("t4Improvement") private var storedT4Improvement = 0
+    @AppStorage("mealHistoryData") private var mealHistoryData = Data()
 
     private enum Nutrient: CaseIterable {
         case protein
@@ -185,6 +186,7 @@ struct QuestionairePage: View {
                 }
             }
         }
+        .onAppear(perform: applyMealHistoryDietIfAvailable)
     }
 
     private func conditionPicker(title: String, selection: Binding<String>) -> some View {
@@ -287,6 +289,29 @@ struct QuestionairePage: View {
         ThyroSeverityScorer.score(profile: patientProfile)
     }
 
+    private func applyMealHistoryDietIfAvailable() {
+        guard !mealHistoryData.isEmpty,
+              let scannedMeals = try? JSONDecoder().decode([MealAnalysis].self, from: mealHistoryData),
+              !scannedMeals.isEmpty else {
+            return
+        }
+
+        let recentMeals = Array(scannedMeals.prefix(7))
+        let divisor = Double(recentMeals.count)
+        let averageProtein = recentMeals.map(\.protein).reduce(0, +).asDouble / divisor
+        let averageCarbs = recentMeals.map(\.carbs).reduce(0, +).asDouble / divisor
+        let averageVitamins = recentMeals.map(\.vitamins).reduce(0, +).asDouble / divisor
+        let averageProduce = recentMeals.map(\.produce).reduce(0, +).asDouble / divisor
+
+        protein = averageProtein.rounded()
+        carbs = averageCarbs.rounded()
+        vitaminA = (averageVitamins * 0.30).rounded()
+        vitaminB = (averageVitamins * 0.35).rounded()
+        vitaminD = (averageVitamins * 0.35).rounded()
+        fruits = (averageProduce * 0.45).rounded()
+        vegetables = (averageProduce * 0.55).rounded()
+    }
+
     private var patientProfile: ThyroPatientProfile {
         ThyroPatientProfile(
             age: age,
@@ -331,6 +356,12 @@ struct QuestionairePage: View {
 private extension String {
     var numberValue: Double {
         Double(trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+    }
+}
+
+private extension Int {
+    var asDouble: Double {
+        Double(self)
     }
 }
 

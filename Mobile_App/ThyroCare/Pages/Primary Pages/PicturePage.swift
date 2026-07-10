@@ -4,28 +4,17 @@ import AVFoundation
 import Combine
 
 struct PicturePage: View {
-    @State private var meals: [MealAnalysis] = MealAnalysis.sampleHistory
+    @State private var meals: [MealAnalysis] = []
     @State private var showingScanner = false
+    @AppStorage("mealHistoryData") private var mealHistoryData = Data()
     @AppStorage("severityScore") private var storedSeverityScore = 0
     @AppStorage("severityPercentile") private var storedSeverityPercentile = 0
     @AppStorage("tshDecrease") private var storedTSHDecrease = 0
     @AppStorage("t3Improvement") private var storedT3Improvement = 0
     @AppStorage("t4Improvement") private var storedT4Improvement = 0
 
-    private var latestMeal: MealAnalysis {
-        meals.first ?? MealAnalysis.sampleHistory[0]
-    }
-
-    private var latestPredictionResult: ThyroSeverityResult {
-        ThyroSeverityResult(
-            score: max(storedSeverityScore, 42),
-            percentile: max(storedSeverityPercentile, 55),
-            tshDecrease: max(storedTSHDecrease, 12),
-            t3Improvement: max(storedT3Improvement, 8),
-            t4Improvement: max(storedT4Improvement, 9),
-            currentRiskSummary: "Meal analysis has been added to your latest thyroid risk estimate.",
-            futureRiskSummary: "This scan suggests your current meal is likely to modestly support thyroid stability."
-        )
+    private var latestMeal: MealAnalysis? {
+        meals.first
     }
 
     var body: some View {
@@ -36,24 +25,32 @@ struct PicturePage: View {
                 PlateVectorArt()
                     .frame(maxWidth: .infinity)
 
-                ProgressView(value: latestMeal.confidence)
-                    .tint(ThyroUI.teal)
+                if let latestMeal {
+                    ProgressView(value: latestMeal.confidence)
+                        .tint(ThyroUI.teal)
 
-                Text("Latest scan confidence: \(Int(latestMeal.confidence * 100))%")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(ThyroUI.navy)
+                    Text("Latest scan confidence: \(Int(latestMeal.confidence * 100))%")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(ThyroUI.navy)
+                } else {
+                    Text("No meals scanned yet.")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
             }
 
-            ThyroCard {
-                ThyroSectionTitle("Latest analysis", subtitle: latestMeal.name)
-                MealNutritionSummary(meal: latestMeal)
-            }
+            if let latestMeal {
+                ThyroCard {
+                    ThyroSectionTitle("Latest analysis", subtitle: latestMeal.name)
+                    MealNutritionSummary(meal: latestMeal)
+                }
 
-            ThyroCard {
-                ThyroSectionTitle("Thyroid impact")
-                MetricRow(title: "TSH", value: latestMeal.tshImpact, color: ThyroUI.teal)
-                MetricRow(title: "T3", value: latestMeal.t3Impact, color: ThyroUI.amber)
-                MetricRow(title: "T4", value: latestMeal.t4Impact, color: ThyroUI.violet)
+                ThyroCard {
+                    ThyroSectionTitle("Thyroid impact")
+                    MetricRow(title: "TSH", value: latestMeal.tshImpact, color: ThyroUI.teal)
+                    MetricRow(title: "T3", value: latestMeal.t3Impact, color: ThyroUI.amber)
+                    MetricRow(title: "T4", value: latestMeal.t4Impact, color: ThyroUI.violet)
+                }
             }
 
             LandingButton(title: "Add Meal") {
@@ -61,22 +58,45 @@ struct PicturePage: View {
             }
 
             ThyroCard {
-                ThyroSectionTitle("Meal history", subtitle: "Hardcoded sample log until real food analysis is connected.")
+                ThyroSectionTitle("Meal history", subtitle: "Saved scans from this device.")
 
-                ForEach(meals) { meal in
-                    MealHistoryRow(meal: meal)
+                if meals.isEmpty {
+                    Text("Your scanned meals will appear here after the first analysis.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(meals) { meal in
+                        MealHistoryRow(meal: meal)
 
-                    if meal.id != meals.last?.id {
-                        Divider()
+                        if meal.id != meals.last?.id {
+                            Divider()
+                        }
                     }
                 }
             }
         }
+        .onAppear(perform: loadPersistedMeals)
         .navigationDestination(isPresented: $showingScanner) {
             MealCameraPage { meal in
-                meals.insert(meal, at: 0)
+                meals.insert(meal.copyWithNewID, at: 0)
+                saveMeals()
             }
         }
+    }
+
+    private func loadPersistedMeals() {
+        guard !mealHistoryData.isEmpty,
+              let decodedMeals = try? JSONDecoder().decode([MealAnalysis].self, from: mealHistoryData) else {
+            meals = []
+            return
+        }
+
+        meals = decodedMeals
+    }
+
+    private func saveMeals() {
+        guard let encodedMeals = try? JSONEncoder().encode(meals) else { return }
+        mealHistoryData = encodedMeals
     }
 }
 
@@ -661,6 +681,7 @@ struct MealAnalysis: Identifiable, Equatable, Codable {
     }
 
     enum CodingKeys: String, CodingKey {
+        case id
         case name
         case timeLabel
         case confidence
@@ -674,6 +695,56 @@ struct MealAnalysis: Identifiable, Equatable, Codable {
         case tshPercentChange
         case t3PercentChange
         case t4PercentChange
+    }
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        timeLabel: String,
+        confidence: Double,
+        protein: Int,
+        carbs: Int,
+        vitamins: Int,
+        produce: Int,
+        tshImpact: String,
+        t3Impact: String,
+        t4Impact: String,
+        tshPercentChange: Double,
+        t3PercentChange: Double,
+        t4PercentChange: Double
+    ) {
+        self.id = id
+        self.name = name
+        self.timeLabel = timeLabel
+        self.confidence = confidence
+        self.protein = protein
+        self.carbs = carbs
+        self.vitamins = vitamins
+        self.produce = produce
+        self.tshImpact = tshImpact
+        self.t3Impact = t3Impact
+        self.t4Impact = t4Impact
+        self.tshPercentChange = tshPercentChange
+        self.t3PercentChange = t3PercentChange
+        self.t4PercentChange = t4PercentChange
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try container.decode(String.self, forKey: .name)
+        timeLabel = try container.decode(String.self, forKey: .timeLabel)
+        confidence = try container.decode(Double.self, forKey: .confidence)
+        protein = try container.decode(Int.self, forKey: .protein)
+        carbs = try container.decode(Int.self, forKey: .carbs)
+        vitamins = try container.decode(Int.self, forKey: .vitamins)
+        produce = try container.decode(Int.self, forKey: .produce)
+        tshImpact = try container.decode(String.self, forKey: .tshImpact)
+        t3Impact = try container.decode(String.self, forKey: .t3Impact)
+        t4Impact = try container.decode(String.self, forKey: .t4Impact)
+        tshPercentChange = try container.decode(Double.self, forKey: .tshPercentChange)
+        t3PercentChange = try container.decode(Double.self, forKey: .t3PercentChange)
+        t4PercentChange = try container.decode(Double.self, forKey: .t4PercentChange)
     }
 
     static let scannedSample = MealAnalysis(
@@ -710,38 +781,6 @@ struct MealAnalysis: Identifiable, Equatable, Codable {
         )
     }
 
-    static let sampleHistory = [
-        MealAnalysis(
-            name: "Egg toast and berries",
-            timeLabel: "Today, 8:20 AM",
-            confidence: 0.86,
-            protein: 24,
-            carbs: 42,
-            vitamins: 12,
-            produce: 22,
-            tshImpact: "Slight support",
-            t3Impact: "+2% support",
-            t4Impact: "+1% support",
-            tshPercentChange: -0.9,
-            t3PercentChange: 2.1,
-            t4PercentChange: 1.3
-        ),
-        MealAnalysis(
-            name: "Rice bowl",
-            timeLabel: "Yesterday, 1:05 PM",
-            confidence: 0.81,
-            protein: 18,
-            carbs: 54,
-            vitamins: 8,
-            produce: 20,
-            tshImpact: "May increase",
-            t3Impact: "Neutral",
-            t4Impact: "Neutral",
-            tshPercentChange: 2.6,
-            t3PercentChange: -0.4,
-            t4PercentChange: -0.2
-        )
-    ]
 }
 
 #Preview {
