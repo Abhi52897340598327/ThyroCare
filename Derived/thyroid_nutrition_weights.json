@@ -1,0 +1,13 @@
+{
+  "source": "NHANES 2007-2012: THYROD_E/F/G joined to DR1TOT/DR2TOT, DEMO, BMX, VID, UIO",
+  "model_note": "Weighted cross-sectional association model. Coefficients are association-based, not causal short-term meal effects.",
+  "feature_note": "Nutrient densities are standardized per 1000 kcal and adjusted for age, sex, BMI, serum vitamin D, urinary iodine/creatinine, and cycle.",
+  "sample_sizes": {"tsh": 10600, "t3": 10589, "t4": 10600},
+  "r_squared": {"tsh": 0.02450641, "t3": 0.18525315, "t4": 0.02578885},
+  "weights": {
+    "tsh": {"protein": 0.10521309, "carbs": 0.19192710, "vitamins": -0.50299902, "produce": 0.19986079},
+    "t3": {"protein": 0.03051861, "carbs": 0.35628464, "vitamins": -0.58748455, "produce": 0.02571220},
+    "t4": {"protein": 0.24001525, "carbs": 0.35777575, "vitamins": 0.29357228, "produce": -0.10863672}
+  }
+}
+

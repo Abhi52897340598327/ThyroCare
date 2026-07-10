@@ -1,5 +1,7 @@
 import SwiftUI
 import UIKit
+import AVFoundation
+import Combine
 
 struct PicturePage: View {
     @State private var meals: [MealAnalysis] = MealAnalysis.sampleHistory
@@ -81,7 +83,10 @@ struct PicturePage: View {
 struct MealCameraPage: View {
     let onMealScanned: (MealAnalysis) -> Void
 
+    @StateObject private var camera = MealCameraController()
     @State private var scannedMeal: MealAnalysis?
+    @State private var scanErrorMessage: String?
+    @State private var capturedImage: UIImage?
     @State private var isScanning = false
     @State private var capturedPhoto = false
     @State private var showPrediction = false
@@ -94,7 +99,7 @@ struct MealCameraPage: View {
             VStack(spacing: 28) {
                 Spacer(minLength: 18)
 
-                CameraLensFrame(isCaptured: capturedPhoto)
+                CameraLensFrame(camera: camera, capturedImage: capturedImage, isCaptured: capturedPhoto)
                     .frame(maxWidth: capturedPhoto ? 190 : .infinity)
                     .padding(.horizontal, capturedPhoto ? 0 : 28)
                     .scaleEffect(capturedPhoto ? 0.78 : 1.0)
@@ -107,6 +112,17 @@ struct MealCameraPage: View {
                         .foregroundStyle(ThyroUI.navy)
                         .transition(.opacity)
                 }
+
+                if let scanErrorMessage {
+                    Text(scanErrorMessage)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(ThyroUI.coral)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 36)
+                }
+
+                ThyroMedicalDisclaimer()
+                    .padding(.horizontal, 28)
 
                 Button {
                     scanMeal()
@@ -126,8 +142,7 @@ struct MealCameraPage: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, 54)
-                .disabled(isScanning || capturedPhoto)
-                .opacity(capturedPhoto ? 0.55 : 1)
+                .disabled(isScanning)
 
                 Spacer(minLength: 22)
             }
@@ -136,6 +151,12 @@ struct MealCameraPage: View {
                 LoadingOverlay()
                     .transition(.opacity)
             }
+        }
+        .task {
+            await camera.start()
+        }
+        .onDisappear {
+            camera.stop()
         }
         .navigationTitle("Meal Camera")
         .navigationBarTitleDisplayMode(.inline)
@@ -147,34 +168,47 @@ struct MealCameraPage: View {
     private func scanMeal() {
         guard !isScanning else { return }
 
-        withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
-            capturedPhoto = true
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                isScanning = true
-            }
-        }
-
         Task {
-            let meal: MealAnalysis
-            if let imageData = MealImageFactory.placeholderJPEGData(),
-               let analyzedMeal = try? await MealAnalysisService.shared.analyze(imageData: imageData) {
-                meal = analyzedMeal
-            } else {
-                meal = MealAnalysis.scannedSample
-            }
+            do {
+                await MainActor.run {
+                    scanErrorMessage = nil
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isScanning = true
+                    }
+                }
 
-            try? await Task.sleep(for: .milliseconds(900))
+                let imageData = try await camera.capturePhoto()
+                let capturedUIImage = UIImage(data: imageData)
 
-            await MainActor.run {
-                scannedMeal = meal
-                onMealScanned(meal)
+                await MainActor.run {
+                    capturedImage = capturedUIImage
+                    withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
+                        capturedPhoto = true
+                    }
+                }
 
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isScanning = false
-                    showPrediction = true
+                let meal = try await MealAnalysisService.shared.analyze(imageData: imageData)
+
+                try? await Task.sleep(for: .milliseconds(900))
+
+                await MainActor.run {
+                    scannedMeal = meal
+                    onMealScanned(meal)
+
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isScanning = false
+                        camera.stop()
+                        showPrediction = true
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isScanning = false
+                        capturedPhoto = false
+                        capturedImage = nil
+                        scanErrorMessage = MealAnalysisService.userFacingMessage(for: error)
+                    }
                 }
             }
         }
@@ -182,22 +216,24 @@ struct MealCameraPage: View {
 }
 
 struct CameraLensFrame: View {
+    @ObservedObject var camera: MealCameraController
+    let capturedImage: UIImage?
     var isCaptured = false
 
     private var hasCameraUsageDescription: Bool {
         Bundle.main.object(forInfoDictionaryKey: "NSCameraUsageDescription") != nil
     }
 
-    private var canOpenCameraPreview: Bool {
-        UIImagePickerController.isSourceTypeAvailable(.camera) && hasCameraUsageDescription
-    }
-
     private var cameraUnavailableMessage: String {
-        if !UIImagePickerController.isSourceTypeAvailable(.camera) {
+        if !camera.isCameraAvailable {
             return "Camera preview unavailable in this environment"
         }
 
-        return "Add NSCameraUsageDescription in the target Info settings to enable the iPhone camera"
+        if !hasCameraUsageDescription {
+            return "Add NSCameraUsageDescription in the target Info settings to enable the iPhone camera"
+        }
+
+        return camera.errorMessage ?? "Camera access is unavailable"
     }
 
     var body: some View {
@@ -207,11 +243,11 @@ struct CameraLensFrame: View {
                 .aspectRatio(0.68, contentMode: .fit)
 
             if isCaptured {
-                StaticMealPhoto()
+                StaticMealPhoto(image: capturedImage)
                     .clipShape(Rectangle())
                     .padding(1)
-            } else if canOpenCameraPreview {
-                CameraPreview()
+            } else if camera.isReady {
+                CameraPreview(camera: camera)
                     .clipShape(Rectangle())
                     .padding(1)
                     .allowsHitTesting(false)
@@ -231,17 +267,21 @@ struct CameraLensFrame: View {
 }
 
 struct StaticMealPhoto: View {
+    let image: UIImage?
+
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [Color(red: 0.87, green: 0.96, blue: 0.91), Color(red: 0.70, green: 0.86, blue: 0.77)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            PlateVectorArt()
-                .scaleEffect(0.82)
-                .opacity(0.92)
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                LinearGradient(
+                    colors: [Color(red: 0.87, green: 0.96, blue: 0.91), Color(red: 0.70, green: 0.86, blue: 0.77)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
 
             VStack {
                 Spacer()
@@ -290,17 +330,161 @@ struct LoadingOverlay: View {
     }
 }
 
-struct CameraPreview: UIViewControllerRepresentable {
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.sourceType = .camera
-        picker.cameraCaptureMode = .photo
-        picker.showsCameraControls = false
-        picker.cameraViewTransform = CGAffineTransform(scaleX: 1.35, y: 1.35)
-        return picker
+struct CameraPreview: UIViewRepresentable {
+    @ObservedObject var camera: MealCameraController
+
+    func makeUIView(context: Context) -> CameraPreviewView {
+        let view = CameraPreviewView()
+        view.previewLayer.videoGravity = .resizeAspectFill
+        return view
     }
 
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    func updateUIView(_ uiView: CameraPreviewView, context: Context) {
+        uiView.previewLayer.session = camera.session
+    }
+}
+
+final class CameraPreviewView: UIView {
+    override class var layerClass: AnyClass {
+        AVCaptureVideoPreviewLayer.self
+    }
+
+    var previewLayer: AVCaptureVideoPreviewLayer {
+        layer as! AVCaptureVideoPreviewLayer
+    }
+}
+
+final class MealCameraController: NSObject, ObservableObject, AVCapturePhotoCaptureDelegate {
+    @Published private(set) var isReady = false
+    @Published private(set) var errorMessage: String?
+
+    let session = AVCaptureSession()
+    private let output = AVCapturePhotoOutput()
+    private let sessionQueue = DispatchQueue(label: "thyrocare.camera.session")
+    nonisolated(unsafe) private var photoContinuation: CheckedContinuation<Data, Error>?
+    private var isConfigured = false
+
+    var isCameraAvailable: Bool {
+        UIImagePickerController.isSourceTypeAvailable(.camera)
+    }
+
+    @MainActor
+    func start() async {
+        guard isCameraAvailable else {
+            errorMessage = "Camera preview unavailable in this environment"
+            isReady = false
+            return
+        }
+
+        let accessGranted = await requestCameraAccess()
+        guard accessGranted else {
+            errorMessage = "Camera access is required to scan meals"
+            isReady = false
+            return
+        }
+
+        sessionQueue.async { [weak self] in
+            guard let self else { return }
+
+            do {
+                try self.configureIfNeeded()
+                if !self.session.isRunning {
+                    self.session.startRunning()
+                }
+
+                DispatchQueue.main.async {
+                    self.errorMessage = nil
+                    self.isReady = true
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.errorMessage = error.localizedDescription
+                    self.isReady = false
+                }
+            }
+        }
+    }
+
+    func stop() {
+        sessionQueue.async { [weak self] in
+            guard let self, self.session.isRunning else { return }
+            self.session.stopRunning()
+        }
+    }
+
+    func capturePhoto() async throws -> Data {
+        try await withCheckedThrowingContinuation { continuation in
+            sessionQueue.async { [weak self] in
+                guard let self else { return }
+                guard self.isConfigured else {
+                    continuation.resume(throwing: MealAnalysisServiceError.invalidImageData)
+                    return
+                }
+
+                self.photoContinuation = continuation
+                let settings = AVCapturePhotoSettings()
+                settings.flashMode = .auto
+                self.output.capturePhoto(with: settings, delegate: self)
+            }
+        }
+    }
+
+    nonisolated func photoOutput(
+        _ output: AVCapturePhotoOutput,
+        didFinishProcessingPhoto photo: AVCapturePhoto,
+        error: Error?
+    ) {
+        if let error {
+            photoContinuation?.resume(throwing: error)
+            photoContinuation = nil
+            return
+        }
+
+        guard let data = photo.fileDataRepresentation() else {
+            photoContinuation?.resume(throwing: MealAnalysisServiceError.invalidImageData)
+            photoContinuation = nil
+            return
+        }
+
+        photoContinuation?.resume(returning: data)
+        photoContinuation = nil
+    }
+
+    private func requestCameraAccess() async -> Bool {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            return true
+        case .notDetermined:
+            return await AVCaptureDevice.requestAccess(for: .video)
+        case .denied, .restricted:
+            return false
+        @unknown default:
+            return false
+        }
+    }
+
+    private func configureIfNeeded() throws {
+        guard !isConfigured else { return }
+
+        session.beginConfiguration()
+        session.sessionPreset = .photo
+
+        guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
+            session.commitConfiguration()
+            throw MealAnalysisServiceError.invalidImageData
+        }
+
+        let input = try AVCaptureDeviceInput(device: camera)
+        guard session.canAddInput(input), session.canAddOutput(output) else {
+            session.commitConfiguration()
+            throw MealAnalysisServiceError.invalidImageData
+        }
+
+        session.addInput(input)
+        session.addOutput(output)
+        session.commitConfiguration()
+        isConfigured = true
+    }
 }
 
 struct MealNutritionSummary: View {
@@ -362,6 +546,8 @@ struct MealAnalysisDetailPage: View {
 
     var body: some View {
         ThyroPageScaffold(title: "Meal Results") {
+            ThyroMedicalDisclaimer()
+
             ThyroCard {
                 ThyroSectionTitle("Food contents", subtitle: meal.name)
                 MealNutritionSummary(meal: meal)
@@ -376,7 +562,7 @@ struct MealAnalysisDetailPage: View {
             }
 
             ThyroCard {
-                ThyroSectionTitle("Predicted thyroid impact", subtitle: "Hardcoded meal-analysis values until the real model is connected.")
+                ThyroSectionTitle("Predicted thyroid impact", subtitle: "Calculated on-device from the analyzed food profile.")
 
                 VStack(spacing: 18) {
                     HStack(alignment: .top, spacing: 18) {
@@ -474,6 +660,22 @@ struct MealAnalysis: Identifiable, Equatable, Codable {
         protein + carbs + vitamins + produce
     }
 
+    enum CodingKeys: String, CodingKey {
+        case name
+        case timeLabel
+        case confidence
+        case protein
+        case carbs
+        case vitamins
+        case produce
+        case tshImpact
+        case t3Impact
+        case t4Impact
+        case tshPercentChange
+        case t3PercentChange
+        case t4PercentChange
+    }
+
     static let scannedSample = MealAnalysis(
         name: "Grilled chicken bowl",
         timeLabel: "Just now",
@@ -489,6 +691,24 @@ struct MealAnalysis: Identifiable, Equatable, Codable {
         t3PercentChange: 3.2,
         t4PercentChange: 2.4
     )
+
+    var copyWithNewID: MealAnalysis {
+        MealAnalysis(
+            name: name,
+            timeLabel: timeLabel,
+            confidence: confidence,
+            protein: protein,
+            carbs: carbs,
+            vitamins: vitamins,
+            produce: produce,
+            tshImpact: tshImpact,
+            t3Impact: t3Impact,
+            t4Impact: t4Impact,
+            tshPercentChange: tshPercentChange,
+            t3PercentChange: t3PercentChange,
+            t4PercentChange: t4PercentChange
+        )
+    }
 
     static let sampleHistory = [
         MealAnalysis(

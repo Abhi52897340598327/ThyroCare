@@ -9,7 +9,15 @@ cd Backend
 cp .env.example .env
 ```
 
-Add your new OpenAI and USDA keys to `.env`.
+Add your Gemini and USDA keys to `.env`. OpenAI is optional fallback if configured.
+
+```bash
+GEMINI_API_KEY=your_key_here
+GEMINI_MODEL=gemini-3.1-pro-preview
+USDA_API_KEY=your_key_here
+```
+
+Nano Banana Pro is an image generation/editing model. For meal image understanding, use a Gemini multimodal text model such as `gemini-3.1-pro-preview`, or override `GEMINI_MODEL` if your account exposes a different supported model.
 
 Run:
 
@@ -29,6 +37,7 @@ http://YOUR_MAC_IP:8080
 GET /health
 POST /analyze-meal
 GET /dashboard
+GET /analyses
 ```
 
 `POST /analyze-meal` expects:

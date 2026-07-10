@@ -42,6 +42,8 @@ struct PredictionPage: View {
         let currentResult = displayedResult
 
         ThyroPageScaffold(title: "Results") {
+            ThyroMedicalDisclaimer()
+
             ThyroCard {
                 HStack(alignment: .center, spacing: 18) {
                     AnimatedMetricRing(title: "Severity Score", value: currentResult.normalizedScore, color: ThyroUI.coral)
