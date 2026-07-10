@@ -310,6 +310,20 @@ struct QuestionairePage: View {
         vitaminD = (averageVitamins * 0.35).rounded()
         fruits = (averageProduce * 0.45).rounded()
         vegetables = (averageProduce * 0.55).rounded()
+        normalizeNutrientsToHundred()
+    }
+
+    private func normalizeNutrientsToHundred() {
+        let total = Nutrient.allCases.map(nutrientValue).reduce(0, +)
+        let correction = 100 - total
+
+        guard correction != 0,
+              let correctionTarget = Nutrient.allCases.max(by: { nutrientValue(for: $0) < nutrientValue(for: $1) }) else {
+            return
+        }
+
+        let correctedValue = min(max(nutrientValue(for: correctionTarget) + correction, 0), 100)
+        setNutrient(correctionTarget, to: correctedValue)
     }
 
     private var patientProfile: ThyroPatientProfile {

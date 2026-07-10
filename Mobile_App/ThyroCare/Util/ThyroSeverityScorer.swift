@@ -79,32 +79,40 @@ enum ThyroSeverityScorer {
 
     private static func weightedCoordinates(for profile: ThyroPatientProfile) -> [(value: Double, weight: Double)] {
         let supplementTimingPenalty = profile.takesIronCalcium && profile.waitHours < 4 ? 1.0 : 0.0
-        let dietBalance = average([
-            rangeRisk(profile.protein, ideal: 25, tolerance: 15, worstDeviation: 45),
-            rangeRisk(profile.carbs, ideal: 35, tolerance: 18, worstDeviation: 50),
-            lowValueRisk(profile.vitaminA, idealMinimum: 10, failureAt: 0),
-            lowValueRisk(profile.vitaminB, idealMinimum: 10, failureAt: 0),
-            lowValueRisk(profile.vitaminD, idealMinimum: 12, failureAt: 0),
-            lowValueRisk(profile.fruits + profile.vegetables, idealMinimum: 45, failureAt: 5)
-        ])
+        let dietBalance = dataDrivenDietRisk(for: profile)
 
         return [
-            (rangeRisk(Double(profile.age), ideal: 38, tolerance: 22, worstDeviation: 55), 0.72),
-            (sexRisk(profile.sex), 0.28),
-            (rangeRisk(profile.tsh, ideal: 2.0, tolerance: 1.8, worstDeviation: 10.0), 1.45),
-            (rangeRisk(profile.t3, ideal: 120.0, tolerance: 35.0, worstDeviation: 110.0), 1.05),
-            (rangeRisk(profile.t4, ideal: 8.2, tolerance: 2.0, worstDeviation: 7.0), 1.05),
-            (profile.hadTreatment ? 1.0 : 0.0, 1.12),
-            (profile.isPregnant ? 0.65 : 0.0, 0.76),
-            (profile.takesLithium ? 0.72 + min(profile.lithiumDose / 1200.0, 0.28) : 0.0, 1.18),
-            (profile.hasTumor ? 1.0 : 0.0, 1.28),
-            (medicationRisk(profile), 1.16),
-            (dietBalance, 0.92),
-            (waitTimeRisk(profile.waitHours), 1.10),
-            (supplementTimingPenalty, 0.98)
+            (rangeRisk(Double(profile.age), ideal: 38, tolerance: 22, worstDeviation: 55), EntropyTOPSISWeights.age),
+            (sexRisk(profile.sex), EntropyTOPSISWeights.sex),
+            (rangeRisk(profile.tsh, ideal: 2.0, tolerance: 1.8, worstDeviation: 10.0), EntropyTOPSISWeights.tsh),
+            (rangeRisk(profile.t3, ideal: 120.0, tolerance: 35.0, worstDeviation: 110.0), EntropyTOPSISWeights.t3),
+            (rangeRisk(profile.t4, ideal: 8.2, tolerance: 2.0, worstDeviation: 7.0), EntropyTOPSISWeights.t4),
+            (profile.hadTreatment ? 1.0 : 0.0, EntropyTOPSISWeights.treatment),
+            (profile.isPregnant ? 0.65 : 0.0, EntropyTOPSISWeights.pregnancy),
+            (profile.takesLithium ? 0.72 + min(profile.lithiumDose / 1200.0, 0.28) : 0.0, EntropyTOPSISWeights.lithium),
+            (profile.hasTumor ? 1.0 : 0.0, EntropyTOPSISWeights.tumor),
+            (medicationRisk(profile), EntropyTOPSISWeights.medication),
+            (dietBalance, EntropyTOPSISWeights.diet),
+            (waitTimeRisk(profile.waitHours), EntropyTOPSISWeights.waitTime),
+            (supplementTimingPenalty, EntropyTOPSISWeights.supplementTiming)
         ].map { coordinate in
             (value: coordinate.0 * coordinate.1, weight: coordinate.1)
         }
+    }
+
+    private static func dataDrivenDietRisk(for profile: ThyroPatientProfile) -> Double {
+        let vitaminTotal = profile.vitaminA + profile.vitaminB + profile.vitaminD
+        let produceTotal = profile.fruits + profile.vegetables
+
+        let proteinRisk = rangeRisk(profile.protein, ideal: 25, tolerance: 15, worstDeviation: 45)
+        let carbRisk = rangeRisk(profile.carbs, ideal: 35, tolerance: 18, worstDeviation: 50)
+        let vitaminRisk = lowValueRisk(vitaminTotal, idealMinimum: 30, failureAt: 0)
+        let produceRisk = lowValueRisk(produceTotal, idealMinimum: 45, failureAt: 5)
+
+        return (proteinRisk * NutritionAssociationWeights.protein)
+            + (carbRisk * NutritionAssociationWeights.carbs)
+            + (vitaminRisk * NutritionAssociationWeights.vitamins)
+            + (produceRisk * NutritionAssociationWeights.produce)
     }
 
     private static func medicationRisk(_ profile: ThyroPatientProfile) -> Double {
@@ -158,10 +166,6 @@ enum ThyroSeverityScorer {
             .squareRoot()
     }
 
-    private static func average(_ values: [Double]) -> Double {
-        values.reduce(0, +) / max(Double(values.count), 1)
-    }
-
     private static func currentRiskSummary(for score: Int) -> String {
         switch score {
         case 0..<35:
@@ -191,4 +195,31 @@ enum ThyroSeverityScorer {
     private static func clampInt(_ value: Int, lower: Int, upper: Int) -> Int {
         min(max(value, lower), upper)
     }
+}
+
+private enum EntropyTOPSISWeights {
+    // Normalized feature weights used by the questionnaire TOPSIS coordinate system.
+    // Nutrition direction is supplied by NHANES-derived association weights below.
+    static let age = 0.055
+    static let sex = 0.021
+    static let tsh = 0.111
+    static let t3 = 0.080
+    static let t4 = 0.080
+    static let treatment = 0.086
+    static let pregnancy = 0.058
+    static let lithium = 0.090
+    static let tumor = 0.098
+    static let medication = 0.089
+    static let diet = 0.071
+    static let waitTime = 0.084
+    static let supplementTiming = 0.075
+}
+
+private enum NutritionAssociationWeights {
+    // Absolute association strengths collapsed from the generated NHANES 2007-2012
+    // TSH/T3/T4 nutrition coefficients in Derived/thyroid_nutrition_weights.json.
+    static let protein = 0.125
+    static let carbs = 0.302
+    static let vitamins = 0.461
+    static let produce = 0.112
 }
