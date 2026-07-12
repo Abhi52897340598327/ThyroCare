@@ -33,6 +33,15 @@ func configure(_ app: Application) throws {
     app.views.use(.leaf)
     app.routes.defaultMaxBodySize = "8mb"
 
+    app.get { _ in
+        [
+            "status": "ok",
+            "service": "ThyroCareBackend",
+            "health": "/health",
+            "dashboard": "/dashboard"
+        ]
+    }
+
     app.get("health") { _ in
         ["status": "ok", "service": "ThyroCareBackend"]
     }
