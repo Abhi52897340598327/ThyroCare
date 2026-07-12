@@ -19,6 +19,16 @@ struct ThyroCareBackend {
 }
 
 func configure(_ app: Application) throws {
+    app.http.server.configuration.hostname = Environment.get("HOST") ?? "0.0.0.0"
+    app.http.server.configuration.port = Environment.get("PORT").flatMap(Int.init) ?? 8080
+
+    let corsConfiguration = CORSMiddleware.Configuration(
+        allowedOrigin: .all,
+        allowedMethods: [.GET, .POST, .OPTIONS],
+        allowedHeaders: [.accept, .authorization, .contentType, .origin, .xRequestedWith]
+    )
+    app.middleware.use(CORSMiddleware(configuration: corsConfiguration), at: .beginning)
+
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
     app.views.use(.leaf)
     app.routes.defaultMaxBodySize = "8mb"
