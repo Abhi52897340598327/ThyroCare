@@ -1,0 +1,11 @@
+.build
+.swiftpm
+.env
+.env.*
+backend.env
+*.env
+Dockerfile
+.dockerignore
+.DS_Store
+Public/meal-uploads
+*.log
