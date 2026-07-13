@@ -33,13 +33,8 @@ func configure(_ app: Application) throws {
     app.views.use(.leaf)
     app.routes.defaultMaxBodySize = "8mb"
 
-    app.get { _ in
-        [
-            "status": "ok",
-            "service": "ThyroCareBackend",
-            "health": "/health",
-            "dashboard": "/dashboard"
-        ]
+    app.get { _ -> Response in
+        dashboardResponse()
     }
 
     app.get("health") { _ in
@@ -61,12 +56,20 @@ func configure(_ app: Application) throws {
     }
 
     app.get("dashboard") { _ -> Response in
-        Response(
-            status: .ok,
-            headers: ["content-type": "text/html; charset=utf-8"],
-            body: .init(string: DashboardRenderer.render(analyses: mealAnalysisStore.recent()))
-        )
+        dashboardResponse()
     }
+
+    app.get("dashboard", "") { _ -> Response in
+        dashboardResponse()
+    }
+}
+
+func dashboardResponse() -> Response {
+    Response(
+        status: .ok,
+        headers: ["content-type": "text/html; charset=utf-8"],
+        body: .init(string: DashboardRenderer.render(analyses: mealAnalysisStore.recent()))
+    )
 }
 
 func saveUploadedMealImage(_ request: AnalyzeMealRequest, app: Application, logger: Logger) throws -> String? {
