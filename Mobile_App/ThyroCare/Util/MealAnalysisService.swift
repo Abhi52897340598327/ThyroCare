@@ -5,7 +5,7 @@ import Vision
 enum MealAnalysisServiceError: Error {
     case invalidBaseURL
     case invalidImageData
-    case badResponse
+    case badResponse(statusCode: Int, reason: String)
 }
 
 struct MealAnalysisService {
@@ -37,9 +37,15 @@ struct MealAnalysisService {
         request.httpBody = encodedBody
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200..<300).contains(httpResponse.statusCode) else {
-            throw MealAnalysisServiceError.badResponse
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw MealAnalysisServiceError.badResponse(statusCode: 0, reason: "Invalid backend response")
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw MealAnalysisServiceError.badResponse(
+                statusCode: httpResponse.statusCode,
+                reason: backendErrorReason(from: data)
+            )
         }
 
         let backendMeal = try JSONDecoder().decode(MealAnalysis.self, from: data)
@@ -68,6 +74,18 @@ struct MealAnalysisService {
         return compressedData
     }
 
+    private func backendErrorReason(from data: Data) -> String {
+        if let vaporError = try? JSONDecoder().decode(VaporErrorResponse.self, from: data) {
+            return vaporError.reason
+        }
+
+        if let text = String(data: data, encoding: .utf8), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return text
+        }
+
+        return "No error body returned"
+    }
+
     static func userFacingMessage(for error: Error) -> String {
         if let urlError = error as? URLError {
             switch urlError.code {
@@ -78,12 +96,16 @@ struct MealAnalysisService {
             }
         }
 
-        if case MealAnalysisServiceError.badResponse = error {
-            return "The backend responded with an error. Check the backend Terminal logs for OpenAI or USDA failures."
+        if case let MealAnalysisServiceError.badResponse(statusCode, reason) = error {
+            return "Backend error \(statusCode): \(reason)"
         }
 
         return "Meal analysis failed: \(error.localizedDescription)"
     }
+}
+
+private struct VaporErrorResponse: Decodable {
+    let reason: String
 }
 
 private struct AnalyzeMealRequest: Encodable {

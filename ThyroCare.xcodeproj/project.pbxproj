@@ -259,7 +259,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "ThyroCare-Info.plist";
-				INFOPLIST_KEY_NSCameraUsageDescription = "ThyroCare uses the camera to scan meals for food analysis.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "ThyroCare uses the camera to scan meals for nutrition and thyroid impact analysis.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "ThyroCare connects to your local backend server for meal analysis during development.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -293,7 +294,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "ThyroCare-Info.plist";
-				INFOPLIST_KEY_NSCameraUsageDescription = "ThyroCare uses the camera to scan meals for food analysis.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "ThyroCare uses the camera to scan meals for nutrition and thyroid impact analysis.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "ThyroCare connects to your local backend server for meal analysis during development.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

@@ -7,11 +7,7 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>NSCameraUsageDescription</key>
-	<string>ThyroCare uses the camera to scan meals for nutrition and thyroid impact analysis.</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>ThyroCare connects to your local backend server for meal analysis during development.</string>
 	<key>ThyroCareBackendBaseURL</key>
-	<string>http://10.0.0.4:8080</string>
+	<string>https://thyrocare-9qfo.onrender.com</string>
 </dict>
 </plist>
