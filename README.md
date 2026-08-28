@@ -75,7 +75,7 @@ The iOS client also integrates AVFoundation with a GPT-4o mini Vision-Language M
 - iOS 17+
 - Xcode 15+
 - AVFoundation
-- GPT-4o mini Vision-Language Model integration
+- Gemini 3.5 Flash mini Vision-Language Model integration
 - Next.js 14 App Router
 - React 18
 - TypeScript 5+
