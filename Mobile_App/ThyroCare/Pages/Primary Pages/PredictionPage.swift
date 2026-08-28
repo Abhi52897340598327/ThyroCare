@@ -1,9 +1,31 @@
+import Charts
 import SwiftUI
 
 struct PredictionPage: View {
     let result: ThyroSeverityResult
 
     @State private var showDetails = false
+    @State private var demographicProfile = DemographicProfile(
+        age: 35,
+        biologicalSex: .female,
+        raceEthnicity: .notSpecified,
+        weightKilograms: 70,
+        baselineTSH: 6.2,
+        targetTSH: 2.0
+    )
+    @State private var medicationLog: [MedicationLogEntry] = [
+        MedicationLogEntry(
+            medicationName: "Levothyroxine",
+            doseMicrograms: 75,
+            frequency: .daily,
+            dosesPerWeek: 7,
+            adherencePercent: 95,
+            minutesBeforeFood: 45,
+            separatesIronCalciumByFourHours: true
+        )
+    ]
+    @State private var projection: MedicationTSHProjection?
+
     @AppStorage("severityScore") private var storedSeverityScore = 0
     @AppStorage("severityPercentile") private var storedSeverityPercentile = 0
     @AppStorage("tshDecrease") private var storedTSHDecrease = 0
@@ -41,12 +63,170 @@ struct PredictionPage: View {
     var body: some View {
         let currentResult = displayedResult
 
-        ThyroPageScaffold(title: "Results") {
+        ThyroPageScaffold(title: "Prediction") {
             ThyroMedicalDisclaimer()
+            medicationTelemetrySection
+            demographicSection
+            analyzeSection
 
+            if let projection {
+                projectionSection(projection)
+            }
+
+            questionnaireResultSection(currentResult)
+        }
+    }
+
+    private var medicationTelemetrySection: some View {
+        ThyroCard {
+            ThyroSectionTitle("Medication log", subtitle: "Log thyroid medication exposure before running the model.")
+
+            ForEach($medicationLog) { $medication in
+                VStack(alignment: .leading, spacing: 12) {
+                    TextField("Medication", text: $medication.medicationName)
+                        .textFieldStyle(.roundedBorder)
+
+                    HStack(spacing: 10) {
+                        DecimalInputField(title: "Dose mcg", value: $medication.doseMicrograms)
+                        DecimalInputField(title: "Adherence %", value: $medication.adherencePercent)
+                    }
+
+                    Picker("Frequency", selection: $medication.frequency) {
+                        ForEach(MedicationLogEntry.Frequency.allCases) { frequency in
+                            Text(frequency.rawValue).tag(frequency)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    if medication.frequency == .daily {
+                        Stepper("Doses/week: \(medication.dosesPerWeek)", value: $medication.dosesPerWeek, in: 1...7)
+                            .font(.subheadline.weight(.semibold))
+                    }
+
+                    HStack(spacing: 10) {
+                        DecimalInputField(title: "Minutes before food", value: $medication.minutesBeforeFood)
+                        Toggle("4h iron/calcium gap", isOn: $medication.separatesIronCalciumByFourHours)
+                            .font(.caption.weight(.semibold))
+                    }
+                }
+                .padding(.vertical, 8)
+            }
+
+            Button {
+                medicationLog.append(
+                    MedicationLogEntry(
+                        medicationName: "Levothyroxine",
+                        doseMicrograms: 25,
+                        frequency: .daily,
+                        dosesPerWeek: 7,
+                        adherencePercent: 100,
+                        minutesBeforeFood: 30,
+                        separatesIronCalciumByFourHours: true
+                    )
+                )
+                projection = nil
+            } label: {
+                Label("Add medication", systemImage: "plus.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(ThyroUI.teal)
+        }
+    }
+
+    private var demographicSection: some View {
+        ThyroCard {
+            ThyroSectionTitle("Demographic profile", subtitle: "Used to adjust the statistical baseline, not to diagnose disease.")
+
+            HStack(spacing: 10) {
+                IntegerInputField(title: "Age", value: $demographicProfile.age)
+                DecimalInputField(title: "Weight kg", value: $demographicProfile.weightKilograms)
+            }
+
+            Picker("Biological sex", selection: $demographicProfile.biologicalSex) {
+                ForEach(DemographicProfile.BiologicalSex.allCases) { sex in
+                    Text(sex.rawValue).tag(sex)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Picker("Race/ethnicity", selection: $demographicProfile.raceEthnicity) {
+                ForEach(DemographicProfile.RaceEthnicity.allCases) { race in
+                    Text(race.rawValue).tag(race)
+                }
+            }
+
+            HStack(spacing: 10) {
+                DecimalInputField(title: "Current TSH", value: $demographicProfile.baselineTSH)
+                DecimalInputField(title: "Target TSH", value: $demographicProfile.targetTSH)
+            }
+        }
+    }
+
+    private var analyzeSection: some View {
+        LandingButton(title: "Analyze Effects") {
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
+                projection = MedicationTSHPredictor.analyze(
+                    medications: medicationLog,
+                    demographicProfile: demographicProfile
+                )
+            }
+        }
+    }
+
+    private func projectionSection(_ projection: MedicationTSHProjection) -> some View {
+        ThyroCard {
+            ThyroSectionTitle("Projected TSH", subtitle: "30-90 day medication response estimate")
+
+            Chart(projection.points) { point in
+                LineMark(
+                    x: .value("Day", point.day),
+                    y: .value("TSH", point.tsh)
+                )
+                .foregroundStyle(ThyroUI.teal)
+                .lineStyle(StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+
+                PointMark(
+                    x: .value("Day", point.day),
+                    y: .value("TSH", point.tsh)
+                )
+                .foregroundStyle(ThyroUI.coral)
+            }
+            .chartXAxisLabel("Days")
+            .chartYAxisLabel("TSH mIU/L")
+            .frame(height: 240)
+
+            HStack(spacing: 12) {
+                MetricBadge(title: "90-day TSH", value: String(format: "%.2f", projection.projectedTSHAt90Days), color: ThyroUI.teal)
+                MetricBadge(title: "Target", value: String(format: "%.2f", projection.targetTSH), color: ThyroUI.violet)
+            }
+
+            Text(projection.summary)
+                .font(.body)
+                .foregroundStyle(ThyroUI.ink)
+                .fixedSize(horizontal: false, vertical: true)
+
+            DisclosureGroup("Clinical assumptions") {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(projection.clinicalAssumptions, id: \.self) { assumption in
+                        Label(assumption, systemImage: "checkmark.seal")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.top, 8)
+            }
+            .font(.subheadline.weight(.semibold))
+        }
+    }
+
+    private func questionnaireResultSection(_ currentResult: ThyroSeverityResult) -> some View {
+        Group {
             ThyroCard {
+                ThyroSectionTitle("Questionnaire score", subtitle: currentResult.futureRiskSummary)
+
                 HStack(alignment: .center, spacing: 18) {
-                    AnimatedMetricRing(title: "Severity Score", value: currentResult.normalizedScore, color: ThyroUI.coral)
+                    AnimatedMetricRing(title: "Severity", value: currentResult.normalizedScore, color: ThyroUI.coral)
 
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Severity Score (0-100)")
@@ -60,72 +240,23 @@ struct PredictionPage: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-            }
-
-            ThyroCard {
-                ThyroSectionTitle("Current risk", subtitle: currentResult.futureRiskSummary)
 
                 Text(currentResult.currentRiskSummary)
                     .font(.body)
                     .foregroundStyle(ThyroUI.ink)
-
-                AnimatedBarChart(
-                    values: [currentResult.normalizedScore, max(currentResult.normalizedScore - 0.12, 0.05), 0.48, Double(currentResult.percentile) / 100.0],
-                    labels: ["Risk", "TSH", "T4", "Pct"],
-                    color: ThyroUI.coral
-                )
-            }
-
-            ThyroCard {
-                ThyroSectionTitle("You are not alone", subtitle: "It is ok. Many people are in the same boat as you.")
-
-                HStack(spacing: 14) {
-                    ForEach(0..<5, id: \.self) { index in
-                        Image(systemName: index < similarPatientIconCount(for: currentResult.score) ? "person.fill" : "person")
-                            .font(.title2)
-                            .foregroundStyle(index < similarPatientIconCount(for: currentResult.score) ? ThyroUI.teal : ThyroUI.softGray)
-                    }
-                    Spacer()
-                    Text("\(similarPatientIconCount(for: currentResult.score)) in 5")
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(ThyroUI.navy)
-                }
-            }
-
-            ThyroCard {
-                ThyroSectionTitle("With ThyroCare", subtitle: "We predict your TSH, T3, and T4 can improve with consistent changes.")
-
-                HStack(spacing: 28) {
-                    AnimatedMetricRing(title: "TSH decrease", value: Double(currentResult.tshDecrease) / 100.0, color: ThyroUI.teal)
-                    AnimatedMetricRing(title: "T3 improve", value: Double(currentResult.t3Improvement) / 100.0, color: ThyroUI.amber)
-                }
-                .frame(maxWidth: .infinity)
-
-                HStack(spacing: 14) {
-                    AnimatedMetricRing(title: "T4 improve", value: Double(currentResult.t4Improvement) / 100.0, color: ThyroUI.violet)
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Take control of your levels with ThyroCare")
-                            .font(.title3.weight(.bold))
-                            .foregroundStyle(ThyroUI.navy)
-                        Text("Use the dashboard to track labs, diet, and medication timing after each check-in.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
             }
 
             VStack(spacing: 14) {
-                LandingButton(title: "Lets Go!") {
+                Button {
                     withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
                         showDetails.toggle()
                     }
+                } label: {
+                    Label(showDetails ? "Hide scoring logic" : "Show scoring logic", systemImage: "info.circle")
+                        .font(.subheadline.weight(.semibold))
                 }
-
-                Button("Thanks but no") {
-                    showDetails = false
-                }
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .buttonStyle(.plain)
+                .foregroundStyle(ThyroUI.navy)
             }
 
             if showDetails {
@@ -137,10 +268,6 @@ struct PredictionPage: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-    }
-
-    private func similarPatientIconCount(for score: Int) -> Int {
-        min(max(Int((Double(score) / 100.0 * 5.0).rounded()), 1), 5)
     }
 
     private func ordinal(_ number: Int) -> String {
@@ -161,6 +288,59 @@ struct PredictionPage: View {
         }
 
         return "\(number)\(suffix)"
+    }
+}
+
+private struct DecimalInputField: View {
+    let title: String
+    @Binding var value: Double
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            TextField(title, value: $value, format: .number.precision(.fractionLength(0...2)))
+                .keyboardType(.decimalPad)
+                .textFieldStyle(.roundedBorder)
+        }
+    }
+}
+
+private struct IntegerInputField: View {
+    let title: String
+    @Binding var value: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            TextField(title, value: $value, format: .number)
+                .keyboardType(.numberPad)
+                .textFieldStyle(.roundedBorder)
+        }
+    }
+}
+
+private struct MetricBadge: View {
+    let title: String
+    let value: String
+    let color: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(color)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(color.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 
