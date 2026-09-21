@@ -285,7 +285,7 @@ struct AnimatedBarChart: View {
                     }
                     .frame(height: 140)
 
-                    Text(labels[index])
+                    Text(label(for: index))
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -297,6 +297,14 @@ struct AnimatedBarChart: View {
                 animate = true
             }
         }
+    }
+
+    private func label(for index: Int) -> String {
+        guard labels.indices.contains(index) else {
+            return "Item \(index + 1)"
+        }
+
+        return labels[index]
     }
 }
 
@@ -314,7 +322,7 @@ struct DonutSegmentChart: View {
             ForEach(values.indices, id: \.self) { index in
                 Circle()
                     .trim(from: start(for: index), to: end(for: index))
-                    .stroke(colors[index % colors.count], style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
+                    .stroke(color(for: index), style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
                     .rotationEffect(.degrees(-90))
             }
         }
@@ -326,6 +334,14 @@ struct DonutSegmentChart: View {
 
     private func end(for index: Int) -> Double {
         values.prefix(index + 1).reduce(0, +) / total
+    }
+
+    private func color(for index: Int) -> Color {
+        guard !colors.isEmpty else {
+            return ThyroUI.teal
+        }
+
+        return colors[index % colors.count]
     }
 }
 

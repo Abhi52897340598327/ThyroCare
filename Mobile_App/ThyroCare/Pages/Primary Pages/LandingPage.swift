@@ -36,11 +36,11 @@ struct LandingPage: View {
                     Spacer(minLength: 80)
 
                     VStack(spacing: 34) {
-                        LandingButton(title: Constants.buttonTitles[0]) {
+                        LandingButton(title: Constants.loginString) {
                             showingLogin = true
                         }
 
-                        LandingButton(title: Constants.buttonTitles[1]) {
+                        LandingButton(title: Constants.signUpString) {
                             showingSignUp = true
                         }
                     }

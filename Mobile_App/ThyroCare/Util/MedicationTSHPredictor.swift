@@ -71,7 +71,9 @@ struct MedicationTSHProjection: Codable, Equatable {
 
 enum MedicationTSHPredictor {
     static func analyze(medications: [MedicationLogEntry], demographicProfile: DemographicProfile) -> MedicationTSHProjection {
-        let totalEffectiveDose = medications.reduce(0) { $0 + $1.effectiveDailyDose }
+        let loggedEffectiveDose = medications.reduce(0) { $0 + $1.effectiveDailyDose }
+        let demographicAbsorptionFactor = demographicAbsorptionFactor(for: demographicProfile)
+        let totalEffectiveDose = loggedEffectiveDose * demographicAbsorptionFactor
         let expectedReplacementDose = expectedDailyReplacementDose(for: demographicProfile)
         let referenceTarget = demographicAdjustedTargetTSH(for: demographicProfile)
         let targetTSH = min(max(demographicProfile.targetTSH, 0.4), max(referenceTarget, 0.8))
@@ -145,6 +147,38 @@ enum MedicationTSHPredictor {
         }
 
         return min(max(target, 0.4), 4.8)
+    }
+
+    private static func demographicAbsorptionFactor(for profile: DemographicProfile) -> Double {
+        var factor = 1.0
+
+        // Clinical assumption: demographic variables are weak PK priors compared with dose timing,
+        // adherence, body weight, pregnancy status, GI disease, and interacting medications.
+        if profile.age >= 70 {
+            factor *= 0.94
+        } else if profile.age >= 60 {
+            factor *= 0.97
+        }
+
+        switch profile.biologicalSex {
+        case .female:
+            factor *= 0.98
+        case .male:
+            factor *= 1.01
+        case .intersex:
+            factor *= 1.0
+        }
+
+        switch profile.raceEthnicity {
+        case .black:
+            factor *= 1.02
+        case .white:
+            factor *= 0.99
+        case .asian, .hispanic, .nativeAmerican, .multiracial, .notSpecified:
+            factor *= 1.0
+        }
+
+        return min(max(factor, 0.90), 1.08)
     }
 
     private static func expectedDailyReplacementDose(for profile: DemographicProfile) -> Double {

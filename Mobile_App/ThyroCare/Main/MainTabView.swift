@@ -38,6 +38,10 @@ struct MainTabView: View {
                 PredictionPage()
             }
 
+            Tab(Constants.medicationString, systemImage: Constants.medicationImage, value: AppTab.MainTab.medication) {
+                MedicationLogPage()
+            }
+
             Tab(Constants.pictureString, systemImage: Constants.pictureImage, value: AppTab.MainTab.picture) {
                 NavigationStack {
                     PicturePage()

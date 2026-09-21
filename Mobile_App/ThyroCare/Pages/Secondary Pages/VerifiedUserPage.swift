@@ -30,7 +30,7 @@ struct VerifiedUserPage: View {
                         }
                     }
 
-                    LandingButton(title: Constants.buttonTitles[2], action: onViewDashboard)
+                    LandingButton(title: Constants.viewDashboardString, action: onViewDashboard)
                 }
             }
         }

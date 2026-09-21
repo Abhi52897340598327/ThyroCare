@@ -9,9 +9,11 @@ import Foundation
 
 struct Constants {
     static let buttonTitles = ["Log In", "Sign Up", "View Dashboard"]
+    static let viewDashboardString = "View Dashboard"
     static let homeString = "Home"
     static let summaryString = "Summary"
     static let predictionString = "Prediction"
+    static let medicationString = "Medication"
     static let questionaireString = "Questionaire"
     static let dashboardString = "Dashboard"
     static let pictureString = "Food Analysis"
@@ -23,6 +25,7 @@ struct Constants {
     static let homeImage = "house"
     static let summaryImage = "clipboard"
     static let diagnosisImage = "stethoscope"
+    static let medicationImage = "pills"
     static let questionaireImage = "list.bullet.clipboard"
     static let dashboardImage = "chart.line.uptrend.xyaxis"
     static let pictureImage = "camera"

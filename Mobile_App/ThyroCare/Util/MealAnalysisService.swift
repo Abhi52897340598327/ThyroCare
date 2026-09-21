@@ -272,7 +272,13 @@ enum MealThyroidImpactCalculator {
             percentages[largestIndex] += correction
         }
 
-        return (percentages[0], percentages[1], percentages[2], percentages[3])
+        let normalizedValues = percentages + Array(repeating: 0, count: max(0, 4 - percentages.count))
+        return (
+            normalizedValues[safe: 0] ?? 25,
+            normalizedValues[safe: 1] ?? 35,
+            normalizedValues[safe: 2] ?? 20,
+            normalizedValues[safe: 3] ?? 20
+        )
     }
 
     private static func calculate(
@@ -355,5 +361,11 @@ private extension Double {
     func rounded(to places: Int) -> Double {
         let multiplier = Foundation.pow(10.0, Double(places))
         return (self * multiplier).rounded() / multiplier
+    }
+}
+
+private extension Collection {
+    subscript(safe index: Index) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }

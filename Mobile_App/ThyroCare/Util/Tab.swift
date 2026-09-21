@@ -14,6 +14,7 @@ struct AppTab {
         case summary
         case dashboard
         case prediction
+        case medication
         case picture
     }
 }
