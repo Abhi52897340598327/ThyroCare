@@ -1,6 +1,5 @@
 "use client";
 
-import { use } from "react";
 import PatientWorkspaceLayout from "@/components/PatientWorkspaceLayout";
 import { getPatientById } from "@/lib/demoData";
 import { History, ShieldCheck } from "lucide-react";
@@ -8,13 +7,12 @@ import { History, ShieldCheck } from "lucide-react";
 export default function AuditHistoryPage({
   params,
 }: {
-  params: Promise<{ patient_id: string }>;
+  params: { patient_id: string };
 }) {
-  const resolvedParams = use(params);
-  const patient = getPatientById(resolvedParams.patient_id);
+  const patient = getPatientById(params.patient_id);
 
   return (
-    <PatientWorkspaceLayout patientId={resolvedParams.patient_id}>
+    <PatientWorkspaceLayout patientId={params.patient_id}>
       <div className="space-y-6">
         
         {/* Header */}
@@ -27,7 +25,7 @@ export default function AuditHistoryPage({
 
         <div className="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden">
           <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 font-bold text-xs text-slate-700 uppercase flex justify-between items-center">
-            <span>Audit Trail Entries ({patient.auditHistory.length + 2} events)</span>
+            <span>Audit Trail Entries ({patient.auditHistory.length + 1} events)</span>
             <span className="text-[11px] text-slate-500 font-normal">Tamper-evident audit storage</span>
           </div>
 

@@ -1,17 +1,16 @@
 "use client";
 
-import { use, useState } from "react";
+import { useState } from "react";
 import PatientWorkspaceLayout from "@/components/PatientWorkspaceLayout";
 import { getPatientById, ClinicalNote } from "@/lib/demoData";
-import { FileCheck, Lock, Eye, PlusCircle, ShieldAlert } from "lucide-react";
+import { Lock, Eye, PlusCircle, ShieldAlert } from "lucide-react";
 
 export default function ClinicalNotesPage({
   params,
 }: {
-  params: Promise<{ patient_id: string }>;
+  params: { patient_id: string };
 }) {
-  const resolvedParams = use(params);
-  const patient = getPatientById(resolvedParams.patient_id);
+  const patient = getPatientById(params.patient_id);
   const [notes, setNotes] = useState<ClinicalNote[]>(patient.notes);
   const [noteType, setNoteType] = useState<"patient-visible" | "private">("private");
   const [noteText, setNoteText] = useState("");
@@ -33,7 +32,7 @@ export default function ClinicalNotesPage({
   };
 
   return (
-    <PatientWorkspaceLayout patientId={resolvedParams.patient_id}>
+    <PatientWorkspaceLayout patientId={params.patient_id}>
       <div className="space-y-6">
         
         {/* Header */}

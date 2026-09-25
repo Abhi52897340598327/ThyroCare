@@ -1,6 +1,5 @@
 "use client";
 
-import { use } from "react";
 import PatientWorkspaceLayout from "@/components/PatientWorkspaceLayout";
 import { getPatientById } from "@/lib/demoData";
 import { ShieldCheck, CheckCircle2, XCircle } from "lucide-react";
@@ -8,13 +7,12 @@ import { ShieldCheck, CheckCircle2, XCircle } from "lucide-react";
 export default function SharingPage({
   params,
 }: {
-  params: Promise<{ patient_id: string }>;
+  params: { patient_id: string };
 }) {
-  const resolvedParams = use(params);
-  const patient = getPatientById(resolvedParams.patient_id);
+  const patient = getPatientById(params.patient_id);
 
   return (
-    <PatientWorkspaceLayout patientId={resolvedParams.patient_id}>
+    <PatientWorkspaceLayout patientId={params.patient_id}>
       <div className="space-y-6">
         
         {/* Header */}

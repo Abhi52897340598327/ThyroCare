@@ -1,17 +1,16 @@
 "use client";
 
-import { use, useState } from "react";
+import { useState } from "react";
 import PatientWorkspaceLayout from "@/components/PatientWorkspaceLayout";
 import { getPatientById } from "@/lib/demoData";
-import { Stethoscope, Activity, Info, TrendingUp } from "lucide-react";
+import { Stethoscope, Info, TrendingUp } from "lucide-react";
 
 export default function SymptomsPage({
   params,
 }: {
-  params: Promise<{ patient_id: string }>;
+  params: { patient_id: string };
 }) {
-  const resolvedParams = use(params);
-  const patient = getPatientById(resolvedParams.patient_id);
+  const patient = getPatientById(params.patient_id);
   const [filterPresentOnly, setFilterPresentOnly] = useState(false);
 
   const displayedSymptoms = filterPresentOnly 
@@ -19,7 +18,7 @@ export default function SymptomsPage({
     : patient.symptoms;
 
   return (
-    <PatientWorkspaceLayout patientId={resolvedParams.patient_id}>
+    <PatientWorkspaceLayout patientId={params.patient_id}>
       <div className="space-y-6">
         
         {/* Header */}

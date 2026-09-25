@@ -1,17 +1,16 @@
 "use client";
 
-import { use, useState } from "react";
+import { useState } from "react";
 import PatientWorkspaceLayout from "@/components/PatientWorkspaceLayout";
 import { getPatientById, TimelineEvent } from "@/lib/demoData";
-import { Clock, Filter, FlaskConical, Pill, Utensils, Stethoscope, FileText, Calendar } from "lucide-react";
+import { Clock, FlaskConical, Pill, Utensils, Stethoscope, FileText, Calendar } from "lucide-react";
 
 export default function TimelinePage({
   params,
 }: {
-  params: Promise<{ patient_id: string }>;
+  params: { patient_id: string };
 }) {
-  const resolvedParams = use(params);
-  const patient = getPatientById(resolvedParams.patient_id);
+  const patient = getPatientById(params.patient_id);
   const [filterType, setFilterType] = useState<string>("ALL");
 
   const filteredTimeline = filterType === "ALL" 
@@ -36,7 +35,7 @@ export default function TimelinePage({
   };
 
   return (
-    <PatientWorkspaceLayout patientId={resolvedParams.patient_id}>
+    <PatientWorkspaceLayout patientId={params.patient_id}>
       <div className="space-y-6">
         
         {/* Header */}

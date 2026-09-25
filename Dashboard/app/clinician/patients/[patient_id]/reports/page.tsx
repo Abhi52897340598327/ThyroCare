@@ -1,17 +1,16 @@
 "use client";
 
-import { use, useState } from "react";
+import { useState } from "react";
 import PatientWorkspaceLayout from "@/components/PatientWorkspaceLayout";
 import { getPatientById, PatientReport } from "@/lib/demoData";
-import { FileText, PlusCircle, Download, Share2, CheckCircle2 } from "lucide-react";
+import { FileText, PlusCircle, Download, Share2 } from "lucide-react";
 
 export default function ReportsPage({
   params,
 }: {
-  params: Promise<{ patient_id: string }>;
+  params: { patient_id: string };
 }) {
-  const resolvedParams = use(params);
-  const patient = getPatientById(resolvedParams.patient_id);
+  const patient = getPatientById(params.patient_id);
   const [reports, setReports] = useState<PatientReport[]>(patient.reports);
   const [generating, setGenerating] = useState(false);
 
@@ -30,7 +29,7 @@ export default function ReportsPage({
   };
 
   return (
-    <PatientWorkspaceLayout patientId={resolvedParams.patient_id}>
+    <PatientWorkspaceLayout patientId={params.patient_id}>
       <div className="space-y-6">
         
         {/* Header */}

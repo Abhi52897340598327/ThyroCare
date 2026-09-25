@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { useState } from "react";
 import PatientWorkspaceLayout from "@/components/PatientWorkspaceLayout";
 import { getPatientById } from "@/lib/demoData";
 import { Activity, Calendar, ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
@@ -8,10 +8,9 @@ import { Activity, Calendar, ArrowUpRight, ArrowDownRight, Minus } from "lucide-
 export default function ThyroidSummaryPage({
   params,
 }: {
-  params: Promise<{ patient_id: string }>;
+  params: { patient_id: string };
 }) {
-  const resolvedParams = use(params);
-  const patient = getPatientById(resolvedParams.patient_id);
+  const patient = getPatientById(params.patient_id);
   const [timeframe, setTimeframe] = useState("All Data");
 
   const latest = patient.labs[0];
@@ -22,7 +21,7 @@ export default function ThyroidSummaryPage({
   const ft3ChangePercent = Math.round(((latest.ft3 - previous.ft3) / previous.ft3) * 100);
 
   return (
-    <PatientWorkspaceLayout patientId={resolvedParams.patient_id}>
+    <PatientWorkspaceLayout patientId={params.patient_id}>
       <div className="space-y-6">
         
         {/* Header */}

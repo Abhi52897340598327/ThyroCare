@@ -1,17 +1,16 @@
 "use client";
 
-import { use, useState } from "react";
+import { useState } from "react";
 import PatientWorkspaceLayout from "@/components/PatientWorkspaceLayout";
 import { getPatientById } from "@/lib/demoData";
-import { TrendingUp, AlertCircle, Info, Filter, Layers } from "lucide-react";
+import { TrendingUp, AlertCircle, Info } from "lucide-react";
 
 export default function TSHTrendsPage({
   params,
 }: {
-  params: Promise<{ patient_id: string }>;
+  params: { patient_id: string };
 }) {
-  const resolvedParams = use(params);
-  const patient = getPatientById(resolvedParams.patient_id);
+  const patient = getPatientById(params.patient_id);
 
   const [showTSH, setShowTSH] = useState(true);
   const [showFT4, setShowFT4] = useState(true);
@@ -25,7 +24,7 @@ export default function TSHTrendsPage({
   const overallDeltaPercent = Math.round(((lastLab.tsh - firstLab.tsh) / firstLab.tsh) * 100);
 
   return (
-    <PatientWorkspaceLayout patientId={resolvedParams.patient_id}>
+    <PatientWorkspaceLayout patientId={params.patient_id}>
       <div className="space-y-6">
         
         {/* Header */}
