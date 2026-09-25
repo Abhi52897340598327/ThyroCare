@@ -11,11 +11,17 @@ let package = Package(
         .package(url: "https://github.com/vapor/leaf.git", from: "4.3.0")
     ],
     targets: [
-        .executableTarget(
+        .target(
             name: "App",
             dependencies: [
                 .product(name: "Vapor", package: "vapor"),
                 .product(name: "Leaf", package: "leaf")
+            ]
+        ),
+        .executableTarget(
+            name: "Run",
+            dependencies: [
+                .target(name: "App")
             ]
         ),
         .testTarget(

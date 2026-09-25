@@ -2,346 +2,9 @@ import Foundation
 import Vapor
 import Leaf
 
+// MARK: - Helper Globals & Stores
 let mealAnalysisStore = MealAnalysisStore()
 let storeEngine = DataStoreEngine.shared
-
-@main
-struct ThyroCareBackend {
-    static func main() async throws {
-        var env = try Environment.detect()
-        try LoggingSystem.bootstrap(from: &env)
-
-        let app = try await Application.make(env)
-        defer { Task { try? await app.asyncShutdown() } }
-
-        try configure(app)
-        try await app.execute()
-    }
-}
-
-func configure(_ app: Application) throws {
-    app.http.server.configuration.hostname = Environment.get("HOST") ?? "0.0.0.0"
-    app.http.server.configuration.port = Environment.get("PORT").flatMap(Int.init) ?? 8080
-
-    let corsConfiguration = CORSMiddleware.Configuration(
-        allowedOrigin: .all,
-        allowedMethods: [.GET, .POST, .PUT, .DELETE, .OPTIONS],
-        allowedHeaders: [.accept, .authorization, .contentType, .origin, .xRequestedWith]
-    )
-    app.middleware.use(CORSMiddleware(configuration: corsConfiguration), at: .beginning)
-    app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
-    app.views.use(.leaf)
-    app.routes.defaultMaxBodySize = "16mb"
-
-    // MARK: - Core Root & Health
-    app.get { _ -> Response in
-        dashboardResponse()
-    }
-
-    app.get("health") { _ in
-        [
-            "status": "ok",
-            "service": "ThyroCareBackend",
-            "version": "3.0.0",
-            "timestamp": ISO8601DateFormatter().string(from: Date())
-        ]
-    }
-
-    // MARK: - Debug & Telemetry Portal (SEPARATE LINK)
-    app.get("debug") { _ -> Response in
-        debugDashboardResponse()
-    }
-
-    app.get("debug", "") { _ -> Response in
-        debugDashboardResponse()
-    }
-
-    app.get("dashboard") { _ -> Response in
-        dashboardResponse()
-    }
-
-    app.get("dashboard", "") { _ -> Response in
-        dashboardResponse()
-    }
-
-    // MARK: - Auth Routes
-    app.post("auth", "login") { req async throws -> AuthResponse in
-        struct LoginReq: Content { let email: String; let role: String? }
-        let body = try req.content.decode(LoginReq.self)
-        let role = UserRole(rawValue: body.role ?? "patient") ?? .patient
-        let user = UserProfile(id: "P-1001", email: body.email, name: "Abhiraam Venigalla", role: role)
-        return AuthResponse(token: "thyrocare_secure_token_\(UUID().uuidString)", user: user)
-    }
-
-    // MARK: - Patient Data & Longitudinal Labs
-    app.get("patients", ":id", "summary") { req -> PatientSummaryResponse in
-        let pid = req.parameters.get("id") ?? "P-1001"
-        AuditLogger.shared.log(actorUserId: pid, actorRole: .patient, patientId: pid, resourceType: "PatientSummary", action: "VIEW_SUMMARY")
-        let labs = storeEngine.getLabs(patientId: pid)
-        let meds = storeEngine.getMedications(patientId: pid)
-        let trend = ThyroidTrendEngine.analyze(patientId: pid, labs: labs)
-        return PatientSummaryResponse(
-            patientId: pid,
-            latestTSH: trend.latestTSH,
-            previousTSH: trend.previousTSH,
-            trendDirection: trend.direction.rawValue,
-            activeMedicationsCount: meds.count,
-            labsCount: labs.count
-        )
-    }
-
-    app.get("patients", ":id", "labs") { req -> [LabResultRecord] in
-        let pid = req.parameters.get("id") ?? "P-1001"
-        AuditLogger.shared.log(actorUserId: pid, actorRole: .patient, patientId: pid, resourceType: "LabResults", action: "VIEW_LABS")
-        return storeEngine.getLabs(patientId: pid)
-    }
-
-    app.post("patients", ":id", "labs") { req async throws -> LabResultRecord in
-        let pid = req.parameters.get("id") ?? "P-1001"
-        struct AddLabInput: Content {
-            let tsh: Double
-            let freeT4: Double?
-            let freeT3: Double?
-            let labName: String?
-            let testDate: String?
-        }
-        let input = try req.content.decode(AddLabInput.self)
-        let record = LabResultRecord(
-            patientId: pid,
-            testDate: input.testDate ?? ISO8601DateFormatter().string(from: Date()).prefix(10).description,
-            labName: input.labName ?? "Quest Diagnostics",
-            tsh: input.tsh,
-            freeT4: input.freeT4,
-            freeT3: input.freeT3
-        )
-        storeEngine.addLab(patientId: pid, lab: record)
-        AuditLogger.shared.log(actorUserId: pid, actorRole: .patient, patientId: pid, resourceType: "LabResults", action: "CREATE_LAB")
-        return record
-    }
-
-    app.get("patients", ":id", "trends") { req -> ThyroidTrendAnalysis in
-        let pid = req.parameters.get("id") ?? "P-1001"
-        let labs = storeEngine.getLabs(patientId: pid)
-        return ThyroidTrendEngine.analyze(patientId: pid, labs: labs)
-    }
-
-    app.get("patients", ":id", "timeline") { req -> [TimelineEvent] in
-        let pid = req.parameters.get("id") ?? "P-1001"
-        let labs = storeEngine.getLabs(patientId: pid)
-        let meds = storeEngine.getMedications(patientId: pid)
-        let foods = storeEngine.getFoodLogs(patientId: pid)
-
-        var events: [TimelineEvent] = []
-        labs.forEach { lab in
-            events.append(TimelineEvent(patientId: pid, date: lab.testDate, category: "lab", title: "Laboratory Test (TSH \(lab.tsh))", summary: "TSH: \(lab.tsh) mIU/L | Lab: \(lab.labName)"))
-        }
-        meds.forEach { med in
-            events.append(TimelineEvent(patientId: pid, date: med.startDate, category: "medication", title: "Medication Started (\(med.name))", summary: "\(med.name) \(med.dose) \(med.unit) - \(med.frequency)"))
-        }
-        foods.forEach { food in
-            events.append(TimelineEvent(patientId: pid, date: food.timestamp.prefix(10).description, category: "food", title: "Meal Scanned (\(food.mealName))", summary: food.safetyDisclaimer))
-        }
-
-        return events.sorted { $0.date > $1.date }
-    }
-
-    app.get("patients", ":id", "clinical-summary") { req -> AICinicalSummary in
-        let pid = req.parameters.get("id") ?? "P-1001"
-        let labs = storeEngine.getLabs(patientId: pid)
-        let meds = storeEngine.getMedications(patientId: pid)
-        let foods = storeEngine.getFoodLogs(patientId: pid)
-        return AISummarizerService.summarize(patientName: pid, labs: labs, meds: meds, foods: foods)
-    }
-
-    // MARK: - Medication Management
-    app.get("patients", ":id", "medications") { req -> [MedicationRecord] in
-        let pid = req.parameters.get("id") ?? "P-1001"
-        return storeEngine.getMedications(patientId: pid)
-    }
-
-    app.post("patients", ":id", "medications") { req async throws -> MedicationRecord in
-        let pid = req.parameters.get("id") ?? "P-1001"
-        struct AddMedInput: Content {
-            let name: String
-            let dose: String
-            let unit: String?
-            let frequency: String?
-        }
-        let input = try req.content.decode(AddMedInput.self)
-        let med = MedicationRecord(
-            patientId: pid,
-            name: input.name,
-            genericName: input.name,
-            dose: input.dose,
-            unit: input.unit ?? "mcg",
-            frequency: input.frequency ?? "Daily",
-            startDate: ISO8601DateFormatter().string(from: Date()).prefix(10).description,
-            interactionNotes: ThyroidKnowledgeBase.inspectMedication(input.name)
-        )
-        storeEngine.addMedication(patientId: pid, med: med)
-        return med
-    }
-
-    // MARK: - Clinician Web App Portal Endpoints
-    app.get("clinician", "patients") { req -> [ClinicianPatientSummary] in
-        AuditLogger.shared.log(actorUserId: "C-2001", actorRole: .clinician, patientId: "ALL", resourceType: "ClinicianDashboard", action: "VIEW_PATIENT_LIST")
-        let patients = storeEngine.getAllPatientsForClinician(clinicianId: "C-2001")
-        return patients.map { p in
-            let labs = storeEngine.getLabs(patientId: p.id)
-            let trend = ThyroidTrendEngine.analyze(patientId: p.id, labs: labs)
-            let events = storeEngine.getReviewEvents(patientId: p.id)
-            return ClinicianPatientSummary(
-                patientId: p.id,
-                name: p.name,
-                latestTSH: trend.latestTSH,
-                previousTSH: trend.previousTSH,
-                percentChange: trend.percentChange,
-                trendDirection: trend.direction.rawValue,
-                lastLabDate: labs.last?.testDate ?? "None",
-                reviewFlag: !events.filter { $0.status == "pending" }.isEmpty
-            )
-        }
-    }
-
-    app.get("clinician", "patients", ":id", "review-events") { req -> [ClinicalReviewEvent] in
-        let pid = req.parameters.get("id") ?? "P-1002"
-        return storeEngine.getReviewEvents(patientId: pid)
-    }
-
-    app.post("clinician", "review-events", ":id", "review") { req async throws -> HTTPStatus in
-        let eventId = req.parameters.get("id") ?? ""
-        struct ReviewInput: Content {
-            let status: String
-            let clinicianPrivateNotes: String?
-            let patientVisibleNotes: String?
-        }
-        let input = try req.content.decode(ReviewInput.self)
-        storeEngine.updateReviewEvent(eventId: eventId, status: input.status, privateNotes: input.clinicianPrivateNotes, publicNotes: input.patientVisibleNotes)
-        return .ok
-    }
-
-    // MARK: - Family Portal Endpoints
-    app.get("family-links") { req -> [FamilyLinkRecord] in
-        return storeEngine.getFamilyLinks(ownerId: "P-1001")
-    }
-
-    app.post("family-links") { req async throws -> FamilyLinkRecord in
-        struct AddFamilyLinkInput: Content {
-            let linkedUserId: String
-            let linkedUserName: String
-            let relationship: String
-            let permissionLevel: String?
-        }
-        let input = try req.content.decode(AddFamilyLinkInput.self)
-        let link = FamilyLinkRecord(
-            ownerUserId: "P-1001",
-            linkedUserId: input.linkedUserId,
-            linkedUserName: input.linkedUserName,
-            relationship: input.relationship,
-            permissionLevel: FamilyPermissionLevel(rawValue: input.permissionLevel ?? "VIEW_SUMMARY") ?? .viewSummary
-        )
-        storeEngine.addFamilyLink(link: link)
-        return link
-    }
-
-    app.delete("family-links", ":id") { req -> HTTPStatus in
-        let linkId = req.parameters.get("id") ?? ""
-        storeEngine.deleteFamilyLink(linkId: linkId)
-        return .ok
-    }
-
-    // MARK: - Clinician Consent Endpoints
-    app.get("patients", ":id", "clinician-access") { req -> [ClinicianConsentRecord] in
-        let pid = req.parameters.get("id") ?? "P-1001"
-        return storeEngine.getConsents(patientId: pid)
-    }
-
-    app.post("patients", ":id", "clinician-access") { req async throws -> ClinicianConsentRecord in
-        let pid = req.parameters.get("id") ?? "P-1001"
-        struct ConsentInput: Content {
-            let clinicianId: String
-            let clinicianName: String
-            let permissionLevel: String?
-        }
-        let input = try req.content.decode(ConsentInput.self)
-        let consent = ClinicianConsentRecord(
-            patientId: pid,
-            clinicianId: input.clinicianId,
-            clinicianName: input.clinicianName,
-            permissionLevel: ClinicianPermissionLevel(rawValue: input.permissionLevel ?? "SUMMARY_ONLY") ?? .summaryOnly
-        )
-        storeEngine.addConsent(patientId: pid, consent: consent)
-        return consent
-    }
-
-    app.delete("patients", ":id", "clinician-access", ":clinicianId") { req -> HTTPStatus in
-        let pid = req.parameters.get("id") ?? "P-1001"
-        let cid = req.parameters.get("clinicianId") ?? ""
-        storeEngine.revokeConsent(patientId: pid, clinicianId: cid)
-        return .ok
-    }
-
-    // MARK: - Provider / Endocrinologist Locator
-    app.get("providers", "endocrinologists") { req -> [EndocrinologistProvider] in
-        let query: String? = req.query["query"]
-        return ProviderSearchService.searchEndocrinologists(query: query)
-    }
-
-    // MARK: - Reports Generator & Sharing
-    app.post("patients", ":id", "reports") { req async throws -> GeneratedReportRecord in
-        let pid = req.parameters.get("id") ?? "P-1001"
-        let labs = storeEngine.getLabs(patientId: pid)
-        let meds = storeEngine.getMedications(patientId: pid)
-        let foods = storeEngine.getFoodLogs(patientId: pid)
-        let trend = ThyroidTrendEngine.analyze(patientId: pid, labs: labs)
-        let ai = AISummarizerService.summarize(patientName: "Abhiraam Venigalla", labs: labs, meds: meds, foods: foods)
-
-        let report = ReportGeneratorService.generate(
-            patientId: pid,
-            patientName: "Abhiraam Venigalla",
-            labs: labs,
-            meds: meds,
-            trend: trend,
-            aiSummary: ai
-        )
-        storeEngine.saveReport(report: report)
-        AuditLogger.shared.log(actorUserId: pid, actorRole: .patient, patientId: pid, resourceType: "Report", action: "GENERATE_REPORT")
-        return report
-    }
-
-    app.get("reports", ":id") { req async throws -> Response in
-        let rid = req.parameters.get("id") ?? ""
-        guard let report = storeEngine.getReport(reportId: rid) else {
-            throw Abort(.notFound, reason: "Report not found or token expired.")
-        }
-        return Response(
-            status: .ok,
-            headers: ["content-type": "text/html; charset=utf-8"],
-            body: .init(string: report.htmlReport)
-        )
-    }
-
-    // MARK: - Meal Ingestion & Analysis
-    app.post("analyze-meal") { req async throws -> MealAnalysisResponse in
-        let request = try req.content.decode(AnalyzeMealRequest.self)
-        let imagePath = try saveUploadedMealImage(request, app: req.application, logger: req.logger)
-        let service = MealAnalysisPipeline(client: req.client, logger: req.logger)
-        let response = try await service.analyze(request)
-        mealAnalysisStore.add(response, imagePath: imagePath)
-
-        let (compounds, interp) = ThyroidKnowledgeBase.inspectFood(response.name)
-        let foodItem = IdentifiedFoodItem(food: response.name, confidence: response.confidence, identifiedCompounds: compounds, clinicalInterpretation: interp)
-        let foodRecord = FoodLogRecord(patientId: "P-1001", mealName: response.name, imageURL: imagePath, identifiedFoods: [foodItem])
-        storeEngine.addFoodLog(patientId: "P-1001", food: foodRecord)
-
-        req.logger.info("Meal analysis completed: \(response.name), confidence \(Int(response.confidence * 100))%")
-        return response
-    }
-
-    app.get("analyses") { _ in
-        mealAnalysisStore.recent()
-    }
-}
 
 // MARK: - Response Helper DTOs
 struct PatientSummaryResponse: Content {
@@ -362,6 +25,72 @@ struct ClinicianPatientSummary: Content {
     let trendDirection: String
     let lastLabDate: String
     let reviewFlag: Bool
+}
+
+struct AnalyzeMealRequest: Content {
+    let imageBase64: String?
+    let mimeType: String?
+    let localClassifications: [LocalFoodClassification]?
+}
+
+struct MealAnalysisResponse: Content {
+    let name: String
+    let timeLabel: String
+    let confidence: Double
+    let protein: Int
+    let carbs: Int
+    let vitamins: Int
+    let produce: Int
+    let tshImpact: String
+    let t3Impact: String
+    let t4Impact: String
+    let tshPercentChange: Double
+    let t3PercentChange: Double
+    let t4PercentChange: Double
+    let nutritionDetails: [USDANutritionDetail]
+}
+
+struct USDANutritionDetail: Content {
+    let detectedFood: String
+    let estimatedGrams: Double
+    let usdaSearchQuery: String
+    let usdaDescription: String
+    let calories: Double?
+    let proteinGrams: Double?
+    let carbohydrateGrams: Double?
+    let fiberGrams: Double?
+    let sugarGrams: Double?
+    let fatGrams: Double?
+    let potassiumMilligrams: Double?
+    let vitaminCMilligrams: Double?
+    let vitaminBMilligrams: Double?
+    let vitaminDMicrograms: Double?
+}
+
+final class MealAnalysisStore: @unchecked Sendable {
+    private var analyses: [StoredMealAnalysis] = []
+    private let lock = NSLock()
+
+    func add(_ analysis: MealAnalysisResponse, imagePath: String?) {
+        lock.lock()
+        analyses.insert(StoredMealAnalysis(analysis: analysis, imagePath: imagePath), at: 0)
+        if analyses.count > 20 {
+            analyses.removeLast(analyses.count - 20)
+        }
+        lock.unlock()
+    }
+
+    func recent() -> [StoredMealAnalysis] {
+        lock.lock()
+        let currentAnalyses = analyses
+        lock.unlock()
+        return currentAnalyses
+    }
+}
+
+struct StoredMealAnalysis: Content {
+    let analysis: MealAnalysisResponse
+    let imagePath: String?
 }
 
 // MARK: - HTML Rendering Helpers
@@ -439,72 +168,6 @@ func saveUploadedMealImage(_ request: AnalyzeMealRequest, app: Application, logg
     let publicPath = "/meal-uploads/\(fileName)"
     logger.info("Saved meal image for model inspection: \(publicPath)")
     return publicPath
-}
-
-struct AnalyzeMealRequest: Content {
-    let imageBase64: String?
-    let mimeType: String?
-    let localClassifications: [LocalFoodClassification]?
-}
-
-struct MealAnalysisResponse: Content {
-    let name: String
-    let timeLabel: String
-    let confidence: Double
-    let protein: Int
-    let carbs: Int
-    let vitamins: Int
-    let produce: Int
-    let tshImpact: String
-    let t3Impact: String
-    let t4Impact: String
-    let tshPercentChange: Double
-    let t3PercentChange: Double
-    let t4PercentChange: Double
-    let nutritionDetails: [USDANutritionDetail]
-}
-
-struct USDANutritionDetail: Content {
-    let detectedFood: String
-    let estimatedGrams: Double
-    let usdaSearchQuery: String
-    let usdaDescription: String
-    let calories: Double?
-    let proteinGrams: Double?
-    let carbohydrateGrams: Double?
-    let fiberGrams: Double?
-    let sugarGrams: Double?
-    let fatGrams: Double?
-    let potassiumMilligrams: Double?
-    let vitaminCMilligrams: Double?
-    let vitaminBMilligrams: Double?
-    let vitaminDMicrograms: Double?
-}
-
-final class MealAnalysisStore: @unchecked Sendable {
-    private var analyses: [StoredMealAnalysis] = []
-    private let lock = NSLock()
-
-    func add(_ analysis: MealAnalysisResponse, imagePath: String?) {
-        lock.lock()
-        analyses.insert(StoredMealAnalysis(analysis: analysis, imagePath: imagePath), at: 0)
-        if analyses.count > 20 {
-            analyses.removeLast(analyses.count - 20)
-        }
-        lock.unlock()
-    }
-
-    func recent() -> [StoredMealAnalysis] {
-        lock.lock()
-        let currentAnalyses = analyses
-        lock.unlock()
-        return currentAnalyses
-    }
-}
-
-struct StoredMealAnalysis: Content {
-    let analysis: MealAnalysisResponse
-    let imagePath: String?
 }
 
 enum DashboardRenderer {
@@ -1108,22 +771,16 @@ struct NutritionSummary {
                 vitaminScore += value
                 if name.contains("vitamin c") || name.contains("ascorbic") {
                     vitaminC = value
+                } else if name.contains("vitamin b") || name.contains("thiamin") || name.contains("riboflavin") || name.contains("niacin") || name.contains("folate") {
+                    vitaminBTotal += value
                 } else if name.contains("vitamin d") {
                     vitaminD = value
                 }
-            } else if name.contains("fiber") || name.contains("folate") || name.contains("potassium") {
-                produceScore += value
-            }
-
-            if isVitaminBNutrient(name) {
-                vitaminBTotal += value
-            }
-
-            if name.contains("energy") || name == "calories" {
-                calories = value
+            } else if name.contains("energy") || name.contains("calorie") {
+                if calories == nil { calories = value }
             } else if name.contains("fiber") {
                 fiber = value
-            } else if name.contains("sugars") || name.contains("sugar") {
+            } else if name.contains("sugars") {
                 sugar = value
             } else if name.contains("total lipid") || name.contains("fat") {
                 fat = value
@@ -1132,63 +789,44 @@ struct NutritionSummary {
             }
         }
 
+        if usdaFood.dataType?.lowercased().contains("foundation") == true || usdaFood.dataType?.lowercased().contains("survey") == true {
+            produceScore += grams
+        }
+
         details.append(
             USDANutritionDetail(
                 detectedFood: detectedFood.name,
-                estimatedGrams: grams.rounded(to: 1),
+                estimatedGrams: grams,
                 usdaSearchQuery: detectedFood.usdaSearchQuery,
-                usdaDescription: usdaFood.description ?? "Unknown USDA food",
-                calories: calories?.rounded(to: 1),
-                proteinGrams: protein?.rounded(to: 1),
-                carbohydrateGrams: carbs?.rounded(to: 1),
-                fiberGrams: fiber?.rounded(to: 1),
-                sugarGrams: sugar?.rounded(to: 1),
-                fatGrams: fat?.rounded(to: 1),
-                potassiumMilligrams: potassium?.rounded(to: 1),
-                vitaminCMilligrams: vitaminC?.rounded(to: 1),
-                vitaminBMilligrams: vitaminBTotal > 0 ? vitaminBTotal.rounded(to: 1) : nil,
-                vitaminDMicrograms: vitaminD?.rounded(to: 1)
+                usdaDescription: usdaFood.description ?? "USDA entry",
+                calories: calories,
+                proteinGrams: protein,
+                carbohydrateGrams: carbs,
+                fiberGrams: fiber,
+                sugarGrams: sugar,
+                fatGrams: fat,
+                potassiumMilligrams: potassium,
+                vitaminCMilligrams: vitaminC,
+                vitaminBMilligrams: vitaminBTotal > 0 ? vitaminBTotal : nil,
+                vitaminDMicrograms: vitaminD
             )
         )
     }
 
-    private func isVitaminBNutrient(_ name: String) -> Bool {
-        name.contains("thiamin")
-            || name.contains("riboflavin")
-            || name.contains("niacin")
-            || name.contains("pantothenic")
-            || name.contains("vitamin b")
-            || name.contains("b-6")
-            || name.contains("b-12")
-            || name.contains("folate")
-            || name.contains("folic")
-    }
-
     func normalized() -> NutritionSummary {
-        let raw = [
-            max(proteinGrams, 1),
-            max(carbGrams, 1),
-            max(vitaminScore * 4, 1),
-            max(produceScore * 1.6, 1)
-        ]
-
-        let total = raw.reduce(0, +)
-        var percentages = raw.map { Int(($0 / total * 100).rounded()) }
-        let correction = 100 - percentages.reduce(0, +)
-        if let maxIndex = percentages.indices.max(by: { percentages[$0] < percentages[$1] }) {
-            percentages[maxIndex] += correction
-        }
-
         var copy = self
-        copy.proteinPercent = percentages[0]
-        copy.carbsPercent = percentages[1]
-        copy.vitaminPercent = percentages[2]
-        copy.producePercent = percentages[3]
+        let totalMacroGrams = max(copy.proteinGrams + copy.carbGrams, 1)
+
+        copy.proteinPercent = min(max(Int((copy.proteinGrams / totalMacroGrams) * 100), 10), 60)
+        copy.carbsPercent = min(max(Int((copy.carbGrams / totalMacroGrams) * 100), 15), 75)
+        copy.vitaminPercent = min(max(Int((copy.vitaminScore / 80.0) * 100), 10), 95)
+        copy.producePercent = min(max(Int((copy.produceScore / 300.0) * 100), 10), 95)
+
         return copy
     }
 }
 
-struct HormoneImpact {
+private struct HormoneImpact {
     let tshDescription: String
     let t3Description: String
     let t4Description: String
@@ -1197,70 +835,35 @@ struct HormoneImpact {
     let t4PercentChange: Double
 }
 
-enum HormoneImpactCalculator {
+private enum HormoneImpactCalculator {
     static func calculate(nutrition: NutritionSummary) -> HormoneImpact {
-        let features = ThyroidNutritionFeatureVector(
-            protein: Double(nutrition.proteinPercent),
-            carbs: Double(nutrition.carbsPercent),
-            vitamins: Double(nutrition.vitaminPercent),
-            produce: Double(nutrition.producePercent)
-        )
+        let proteinBonus = Double(nutrition.proteinPercent) * 0.04
+        let vitaminBonus = Double(nutrition.vitaminPercent) * 0.03
+        let produceBonus = Double(nutrition.producePercent) * 0.03
 
-        let tsh = ThyroidNutritionWeights.score(features, weights: ThyroidNutritionWeights.tsh).rounded(to: 1)
-        let t3 = ThyroidNutritionWeights.score(features, weights: ThyroidNutritionWeights.t3).rounded(to: 1)
-        let t4 = ThyroidNutritionWeights.score(features, weights: ThyroidNutritionWeights.t4).rounded(to: 1)
+        let t3Change = min(max(-1.2 + proteinBonus + vitaminBonus, -3.0), 3.5)
+        let t4Change = min(max(-0.8 + produceBonus + (proteinBonus * 0.5), -2.5), 3.0)
+        let tshChange = min(max(0.9 - (t3Change * 0.45), -3.0), 4.0)
+
+        let tshDesc = tshChange >= 0 ? "Potential slight TSH rise (+\(String(format: "%.1f", tshChange))%)" : "Potential slight TSH decrease (\(String(format: "%.1f", tshChange))%)"
+        let t3Desc = t3Change >= 0 ? "Supports T3 conversion (+\(String(format: "%.1f", t3Change))%)" : "Lower T3 conversion support (\(String(format: "%.1f", t3Change))%)"
+        let t4Desc = t4Change >= 0 ? "Favorable T4 stability (+\(String(format: "%.1f", t4Change))%)" : "Mild T4 reduction factor (\(String(format: "%.1f", t4Change))%)"
 
         return HormoneImpact(
-            tshDescription: tsh <= 0 ? "Likely support" : "May increase",
-            t3Description: t3 >= 0 ? "Support" : "May dip",
-            t4Description: t4 >= 0 ? "Support" : "May dip",
-            tshPercentChange: tsh,
-            t3PercentChange: t3,
-            t4PercentChange: t4
+            tshDescription: tshDesc,
+            t3Description: t3Desc,
+            t4Description: t4Desc,
+            tshPercentChange: tshChange,
+            t3PercentChange: t3Change,
+            t4PercentChange: t4Change
         )
-    }
-}
-
-struct ThyroidNutritionFeatureVector {
-    let protein: Double
-    let carbs: Double
-    let vitamins: Double
-    let produce: Double
-}
-
-struct ThyroidNutritionWeightSet {
-    let protein: Double
-    let carbs: Double
-    let vitamins: Double
-    let produce: Double
-}
-
-enum ThyroidNutritionWeights {
-    private static let baseline = ThyroidNutritionFeatureVector(protein: 25, carbs: 35, vitamins: 20, produce: 20)
-    private static let percentScale = 10.0
-
-    static let tsh = ThyroidNutritionWeightSet(protein: 0.10521309, carbs: 0.19192710, vitamins: -0.50299902, produce: 0.19986079)
-    static let t3 = ThyroidNutritionWeightSet(protein: 0.03051861, carbs: 0.35628464, vitamins: -0.58748455, produce: 0.02571220)
-    static let t4 = ThyroidNutritionWeightSet(protein: 0.24001525, carbs: 0.35777575, vitamins: 0.29357228, produce: -0.10863672)
-
-    static func score(_ features: ThyroidNutritionFeatureVector, weights: ThyroidNutritionWeightSet) -> Double {
-        let centeredProtein = (features.protein - baseline.protein) / 100.0
-        let centeredCarbs = (features.carbs - baseline.carbs) / 100.0
-        let centeredVitamins = (features.vitamins - baseline.vitamins) / 100.0
-        let centeredProduce = (features.produce - baseline.produce) / 100.0
-
-        let raw = (centeredProtein * weights.protein)
-            + (centeredCarbs * weights.carbs)
-            + (centeredVitamins * weights.vitamins)
-            + (centeredProduce * weights.produce)
-
-        return min(max(raw * percentScale, -8), 8)
     }
 }
 
 private extension String {
     func extractJSONObject() -> String {
-        guard let start = firstIndex(of: "{"), let end = lastIndex(of: "}") else {
+        guard let start = firstIndex(of: "{"),
+              let end = lastIndex(of: "}") else {
             return self
         }
 
@@ -1268,9 +871,327 @@ private extension String {
     }
 }
 
-private extension Double {
-    func rounded(to places: Int) -> Double {
-        let multiplier = Foundation.pow(10.0, Double(places))
-        return (self * multiplier).rounded() / multiplier
+// MARK: - App Configuration Entrypoint
+public func configure(_ app: Application) throws {
+    app.http.server.configuration.hostname = Environment.get("HOST") ?? "0.0.0.0"
+    app.http.server.configuration.port = Environment.get("PORT").flatMap(Int.init) ?? 8080
+
+    let corsConfiguration = CORSMiddleware.Configuration(
+        allowedOrigin: .all,
+        allowedMethods: [.GET, .POST, .PUT, .DELETE, .OPTIONS],
+        allowedHeaders: [.accept, .authorization, .contentType, .origin, .xRequestedWith]
+    )
+    app.middleware.use(CORSMiddleware(configuration: corsConfiguration), at: .beginning)
+    app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
+    app.views.use(.leaf)
+    app.routes.defaultMaxBodySize = "16mb"
+
+    // MARK: - Core Root & Health
+    app.get { _ -> Response in
+        dashboardResponse()
+    }
+
+    app.get("health") { _ in
+        [
+            "status": "ok",
+            "service": "ThyroCareBackend",
+            "version": "3.0.0",
+            "timestamp": ISO8601DateFormatter().string(from: Date())
+        ]
+    }
+
+    // MARK: - Debug & Telemetry Portal (SEPARATE LINK)
+    app.get("debug") { _ -> Response in
+        debugDashboardResponse()
+    }
+
+    app.get("debug", "") { _ -> Response in
+        debugDashboardResponse()
+    }
+
+    app.get("dashboard") { _ -> Response in
+        dashboardResponse()
+    }
+
+    app.get("dashboard", "") { _ -> Response in
+        dashboardResponse()
+    }
+
+    // MARK: - Auth Routes
+    app.post("auth", "login") { req async throws -> AuthResponse in
+        struct LoginReq: Content { let email: String; let role: String? }
+        let body = try req.content.decode(LoginReq.self)
+        let role = UserRole(rawValue: body.role ?? "patient") ?? .patient
+        let user = UserProfile(id: "P-1001", email: body.email, name: "Abhiraam Venigalla", role: role)
+        return AuthResponse(token: "thyrocare_secure_token_\(UUID().uuidString)", user: user)
+    }
+
+    // MARK: - Patient Data & Longitudinal Labs
+    app.get("patients", ":id", "summary") { req -> PatientSummaryResponse in
+        let pid = req.parameters.get("id") ?? "P-1001"
+        AuditLogger.shared.log(actorUserId: pid, actorRole: .patient, patientId: pid, resourceType: "PatientSummary", action: "VIEW_SUMMARY")
+        let labs = storeEngine.getLabs(patientId: pid)
+        let meds = storeEngine.getMedications(patientId: pid)
+        let trend = ThyroidTrendEngine.analyze(patientId: pid, labs: labs)
+        return PatientSummaryResponse(
+            patientId: pid,
+            latestTSH: trend.latestTSH,
+            previousTSH: trend.previousTSH,
+            trendDirection: trend.direction.rawValue,
+            activeMedicationsCount: meds.count,
+            labsCount: labs.count
+        )
+    }
+
+    app.get("patients", ":id", "labs") { req -> [LabResultRecord] in
+        let pid = req.parameters.get("id") ?? "P-1001"
+        AuditLogger.shared.log(actorUserId: pid, actorRole: .patient, patientId: pid, resourceType: "LabResults", action: "VIEW_LABS")
+        return storeEngine.getLabs(patientId: pid)
+    }
+
+    app.post("patients", ":id", "labs") { req async throws -> LabResultRecord in
+        let pid = req.parameters.get("id") ?? "P-1001"
+        struct AddLabInput: Content {
+            let tsh: Double
+            let freeT4: Double?
+            let freeT3: Double?
+            let labName: String?
+            let testDate: String?
+        }
+        let input = try req.content.decode(AddLabInput.self)
+        let record = LabResultRecord(
+            patientId: pid,
+            testDate: input.testDate ?? ISO8601DateFormatter().string(from: Date()).prefix(10).description,
+            labName: input.labName ?? "Quest Diagnostics",
+            tsh: input.tsh,
+            freeT4: input.freeT4,
+            freeT3: input.freeT3
+        )
+        storeEngine.addLab(patientId: pid, lab: record)
+        AuditLogger.shared.log(actorUserId: pid, actorRole: .patient, patientId: pid, resourceType: "LabResults", action: "CREATE_LAB")
+        return record
+    }
+
+    app.get("patients", ":id", "trends") { req -> ThyroidTrendAnalysis in
+        let pid = req.parameters.get("id") ?? "P-1001"
+        let labs = storeEngine.getLabs(patientId: pid)
+        return ThyroidTrendEngine.analyze(patientId: pid, labs: labs)
+    }
+
+    app.get("patients", ":id", "timeline") { req -> [TimelineEvent] in
+        let pid = req.parameters.get("id") ?? "P-1001"
+        let labs = storeEngine.getLabs(patientId: pid)
+        let meds = storeEngine.getMedications(patientId: pid)
+        let foods = storeEngine.getFoodLogs(patientId: pid)
+
+        var events: [TimelineEvent] = []
+        labs.forEach { lab in
+            events.append(TimelineEvent(patientId: pid, date: lab.testDate, category: "lab", title: "Laboratory Test (TSH \(lab.tsh))", summary: "TSH: \(lab.tsh) mIU/L | Lab: \(lab.labName)"))
+        }
+        meds.forEach { med in
+            events.append(TimelineEvent(patientId: pid, date: med.startDate, category: "medication", title: "Medication Started (\(med.name))", summary: "\(med.name) \(med.dose) \(med.unit) - \(med.frequency)"))
+        }
+        foods.forEach { food in
+            events.append(TimelineEvent(patientId: pid, date: food.timestamp.prefix(10).description, category: "food", title: "Meal Scanned (\(food.mealName))", summary: food.safetyDisclaimer))
+        }
+
+        return events.sorted { $0.date > $1.date }
+    }
+
+    app.get("patients", ":id", "clinical-summary") { req -> AICinicalSummary in
+        let pid = req.parameters.get("id") ?? "P-1001"
+        let labs = storeEngine.getLabs(patientId: pid)
+        let meds = storeEngine.getMedications(patientId: pid)
+        let foods = storeEngine.getFoodLogs(patientId: pid)
+        return AISummarizerService.summarize(patientName: pid, labs: labs, meds: meds, foods: foods)
+    }
+
+    // MARK: - Medication Management
+    app.get("patients", ":id", "medications") { req -> [MedicationRecord] in
+        let pid = req.parameters.get("id") ?? "P-1001"
+        return storeEngine.getMedications(patientId: pid)
+    }
+
+    app.post("patients", ":id", "medications") { req async throws -> MedicationRecord in
+        let pid = req.parameters.get("id") ?? "P-1001"
+        struct AddMedInput: Content {
+            let name: String
+            let dose: String
+            let unit: String?
+            let frequency: String?
+        }
+        let input = try req.content.decode(AddMedInput.self)
+        let med = MedicationRecord(
+            patientId: pid,
+            name: input.name,
+            genericName: input.name,
+            dose: input.dose,
+            unit: input.unit ?? "mcg",
+            frequency: input.frequency ?? "Daily",
+            startDate: ISO8601DateFormatter().string(from: Date()).prefix(10).description,
+            interactionNotes: ThyroidKnowledgeBase.inspectMedication(input.name)
+        )
+        storeEngine.addMedication(patientId: pid, med: med)
+        return med
+    }
+
+    // MARK: - Clinician Web App Portal Endpoints
+    app.get("clinician", "patients") { req -> [ClinicianPatientSummary] in
+        AuditLogger.shared.log(actorUserId: "C-2001", actorRole: .clinician, patientId: "ALL", resourceType: "ClinicianDashboard", action: "VIEW_PATIENT_LIST")
+        let patients = storeEngine.getAllPatientsForClinician(clinicianId: "C-2001")
+        return patients.map { p in
+            let labs = storeEngine.getLabs(patientId: p.id)
+            let trend = ThyroidTrendEngine.analyze(patientId: p.id, labs: labs)
+            let events = storeEngine.getReviewEvents(patientId: p.id)
+            return ClinicianPatientSummary(
+                patientId: p.id,
+                name: p.name,
+                latestTSH: trend.latestTSH,
+                previousTSH: trend.previousTSH,
+                percentChange: trend.percentChange,
+                trendDirection: trend.direction.rawValue,
+                lastLabDate: labs.last?.testDate ?? "None",
+                reviewFlag: !events.filter { $0.status == "pending" }.isEmpty
+            )
+        }
+    }
+
+    app.get("clinician", "patients", ":id", "review-events") { req -> [ClinicalReviewEvent] in
+        let pid = req.parameters.get("id") ?? "P-1002"
+        return storeEngine.getReviewEvents(patientId: pid)
+    }
+
+    app.post("clinician", "review-events", ":id", "review") { req async throws -> HTTPStatus in
+        let eventId = req.parameters.get("id") ?? ""
+        struct ReviewInput: Content {
+            let status: String
+            let clinicianPrivateNotes: String?
+            let patientVisibleNotes: String?
+        }
+        let input = try req.content.decode(ReviewInput.self)
+        storeEngine.updateReviewEvent(eventId: eventId, status: input.status, privateNotes: input.clinicianPrivateNotes, publicNotes: input.patientVisibleNotes)
+        return .ok
+    }
+
+    // MARK: - Family Portal Endpoints
+    app.get("family-links") { req -> [FamilyLinkRecord] in
+        return storeEngine.getFamilyLinks(ownerId: "P-1001")
+    }
+
+    app.post("family-links") { req async throws -> FamilyLinkRecord in
+        struct AddFamilyLinkInput: Content {
+            let linkedUserId: String
+            let linkedUserName: String
+            let relationship: String
+            let permissionLevel: String?
+        }
+        let input = try req.content.decode(AddFamilyLinkInput.self)
+        let link = FamilyLinkRecord(
+            ownerUserId: "P-1001",
+            linkedUserId: input.linkedUserId,
+            linkedUserName: input.linkedUserName,
+            relationship: input.relationship,
+            permissionLevel: FamilyPermissionLevel(rawValue: input.permissionLevel ?? "VIEW_SUMMARY") ?? .viewSummary
+        )
+        storeEngine.addFamilyLink(link: link)
+        return link
+    }
+
+    app.delete("family-links", ":id") { req -> HTTPStatus in
+        let linkId = req.parameters.get("id") ?? ""
+        storeEngine.deleteFamilyLink(linkId: linkId)
+        return .ok
+    }
+
+    // MARK: - Clinician Consent Endpoints
+    app.get("patients", ":id", "clinician-access") { req -> [ClinicianConsentRecord] in
+        let pid = req.parameters.get("id") ?? "P-1001"
+        return storeEngine.getConsents(patientId: pid)
+    }
+
+    app.post("patients", ":id", "clinician-access") { req async throws -> ClinicianConsentRecord in
+        let pid = req.parameters.get("id") ?? "P-1001"
+        struct ConsentInput: Content {
+            let clinicianId: String
+            let clinicianName: String
+            let permissionLevel: String?
+        }
+        let input = try req.content.decode(ConsentInput.self)
+        let consent = ClinicianConsentRecord(
+            patientId: pid,
+            clinicianId: input.clinicianId,
+            clinicianName: input.clinicianName,
+            permissionLevel: ClinicianPermissionLevel(rawValue: input.permissionLevel ?? "SUMMARY_ONLY") ?? .summaryOnly
+        )
+        storeEngine.addConsent(patientId: pid, consent: consent)
+        return consent
+    }
+
+    app.delete("patients", ":id", "clinician-access", ":clinicianId") { req -> HTTPStatus in
+        let pid = req.parameters.get("id") ?? "P-1001"
+        let cid = req.parameters.get("clinicianId") ?? ""
+        storeEngine.revokeConsent(patientId: pid, clinicianId: cid)
+        return .ok
+    }
+
+    // MARK: - Provider / Endocrinologist Locator
+    app.get("providers", "endocrinologists") { req -> [EndocrinologistProvider] in
+        let query: String? = req.query["query"]
+        return ProviderSearchService.searchEndocrinologists(query: query)
+    }
+
+    // MARK: - Reports Generator & Sharing
+    app.post("patients", ":id", "reports") { req async throws -> GeneratedReportRecord in
+        let pid = req.parameters.get("id") ?? "P-1001"
+        let labs = storeEngine.getLabs(patientId: pid)
+        let meds = storeEngine.getMedications(patientId: pid)
+        let foods = storeEngine.getFoodLogs(patientId: pid)
+        let trend = ThyroidTrendEngine.analyze(patientId: pid, labs: labs)
+        let ai = AISummarizerService.summarize(patientName: "Abhiraam Venigalla", labs: labs, meds: meds, foods: foods)
+
+        let report = ReportGeneratorService.generate(
+            patientId: pid,
+            patientName: "Abhiraam Venigalla",
+            labs: labs,
+            meds: meds,
+            trend: trend,
+            aiSummary: ai
+        )
+        storeEngine.saveReport(report: report)
+        AuditLogger.shared.log(actorUserId: pid, actorRole: .patient, patientId: pid, resourceType: "Report", action: "GENERATE_REPORT")
+        return report
+    }
+
+    app.get("reports", ":id") { req async throws -> Response in
+        let rid = req.parameters.get("id") ?? ""
+        guard let report = storeEngine.getReport(reportId: rid) else {
+            throw Abort(.notFound, reason: "Report not found or token expired.")
+        }
+        return Response(
+            status: .ok,
+            headers: ["content-type": "text/html; charset=utf-8"],
+            body: .init(string: report.htmlReport)
+        )
+    }
+
+    // MARK: - Meal Ingestion & Analysis
+    app.post("analyze-meal") { req async throws -> MealAnalysisResponse in
+        let request = try req.content.decode(AnalyzeMealRequest.self)
+        let imagePath = try saveUploadedMealImage(request, app: req.application, logger: req.logger)
+        let service = MealAnalysisPipeline(client: req.client, logger: req.logger)
+        let response = try await service.analyze(request)
+        mealAnalysisStore.add(response, imagePath: imagePath)
+
+        let (compounds, interp) = ThyroidKnowledgeBase.inspectFood(response.name)
+        let foodItem = IdentifiedFoodItem(food: response.name, confidence: response.confidence, identifiedCompounds: compounds, clinicalInterpretation: interp)
+        let foodRecord = FoodLogRecord(patientId: "P-1001", mealName: response.name, imageURL: imagePath, identifiedFoods: [foodItem])
+        storeEngine.addFoodLog(patientId: "P-1001", food: foodRecord)
+
+        req.logger.info("Meal analysis completed: \(response.name), confidence \(Int(response.confidence * 100))%")
+        return response
+    }
+
+    app.get("analyses") { _ in
+        mealAnalysisStore.recent()
     }
 }
