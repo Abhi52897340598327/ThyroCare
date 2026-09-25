@@ -16,20 +16,23 @@ let package = Package(
             dependencies: [
                 .product(name: "Vapor", package: "vapor"),
                 .product(name: "Leaf", package: "leaf")
-            ]
+            ],
+            path: "Sources/App"
         ),
         .executableTarget(
             name: "Run",
             dependencies: [
                 .target(name: "App")
-            ]
+            ],
+            path: "Sources/Run"
         ),
         .testTarget(
             name: "AppTests",
             dependencies: [
                 .target(name: "App"),
                 .product(name: "XCTVapor", package: "vapor")
-            ]
+            ],
+            path: "Tests/AppTests"
         )
     ]
 )
