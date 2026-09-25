@@ -1,255 +1,274 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  Heart,
-  Plus,
-  Shield,
+import { useState } from "react";
+import Link from "next/link";
+import { MOCK_PATIENTS, PatientProfile } from "@/lib/demoData";
+import { 
+  Users, 
+  Home, 
+  FileText, 
+  Calendar, 
+  Settings, 
+  TrendingUp, 
+  FlaskConical, 
+  Pill, 
+  Utensils, 
+  Stethoscope, 
   ShieldCheck,
-  Trash2,
-  UserCheck,
-  Users
+  ChevronRight,
+  Heart
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from "@/components/ui/card";
 
-type FamilyLink = {
-  id: string;
-  ownerUserId: string;
-  linkedUserId: string;
-  linkedUserName: string;
-  relationship: string;
-  permissionLevel: string;
-  grantedAt: string;
-};
-
-export default function FamilyPortalPage() {
-  const [links, setLinks] = useState<FamilyLink[]>([]);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [name, setName] = useState("");
-  const [relationship, setRelationship] = useState("Mother");
-  const [permission, setPermission] = useState("VIEW_SUMMARY");
-
-  useEffect(() => {
-    fetch("http://localhost:8080/family-links")
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data)) setLinks(data);
-      })
-      .catch(() => {
-        setLinks([
-          {
-            id: "fam_1",
-            ownerUserId: "P-1001",
-            linkedUserId: "P-1002",
-            linkedUserName: "Mother Venigalla",
-            relationship: "Mother",
-            permissionLevel: "VIEW_SUMMARY",
-            grantedAt: "2026-05-10"
-          },
-          {
-            id: "fam_2",
-            ownerUserId: "P-1001",
-            linkedUserId: "P-1003",
-            linkedUserName: "Leo Venigalla (Child)",
-            relationship: "Child",
-            permissionLevel: "GUARDIAN_FULL_ACCESS",
-            grantedAt: "2026-06-15"
-          }
-        ]);
-      });
-  }, []);
-
-  const handleAddLink = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name) return;
-
-    const newLink: FamilyLink = {
-      id: `fam_${Date.now()}`,
-      ownerUserId: "P-1001",
-      linkedUserId: `P-${Math.floor(1000 + Math.random() * 9000)}`,
-      linkedUserName: name,
-      relationship,
-      permissionLevel: permission,
-      grantedAt: new Date().toISOString().substring(0, 10)
-    };
-
-    try {
-      await fetch("http://localhost:8080/family-links", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          linkedUserId: newLink.linkedUserId,
-          linkedUserName: name,
-          relationship,
-          permissionLevel: permission
-        })
-      });
-    } catch {
-      // client update
-    }
-
-    setLinks((prev) => [newLink, ...prev]);
-    setName("");
-    setShowAddForm(false);
-  };
-
-  const handleDelete = async (id: string) => {
-    setLinks((prev) => prev.filter((l) => l.id !== id));
-    try {
-      await fetch(`http://localhost:8080/family-links/${id}`, { method: "DELETE" });
-    } catch {
-      // offline fallback
-    }
-  };
+export default function FamilyPortal() {
+  const [selectedPatient, setSelectedPatient] = useState<PatientProfile>(MOCK_PATIENTS[0]);
+  const [activeTab, setActiveTab] = useState<"home" | "trends" | "labs" | "meds" | "diet" | "symptoms" | "reports" | "appointments">("home");
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-8">
-      {/* Banner */}
-      <div className="mb-8 rounded-xl border border-teal-100 bg-slate-900 p-6 text-white shadow-md">
-        <div className="flex items-center gap-2 text-teal-400 font-semibold text-xs tracking-wider uppercase">
-          <Users className="h-4 w-4" />
-          Family & Parent Portal
+    <div className="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-900">
+      
+      {/* Family Top Nav */}
+      <header className="bg-slate-900 border-b border-slate-800 text-white sticky top-0 z-50">
+        <div className="max-w-[1920px] mx-auto px-6 h-14 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <Heart className="w-5 h-5 text-rose-400" />
+            <span className="font-bold text-base tracking-wide text-white">
+              THYROCARE <span className="text-xs px-2 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800 font-semibold uppercase">Family Portal</span>
+            </span>
+          </div>
+
+          <nav className="flex items-center space-x-2 text-xs font-semibold">
+            <button className="px-3 py-1.5 rounded bg-teal-600 text-white">HOME</button>
+            <button className="px-3 py-1.5 rounded text-slate-300 hover:bg-slate-800">FAMILY</button>
+            <button className="px-3 py-1.5 rounded text-slate-300 hover:bg-slate-800">REPORTS</button>
+            <button className="px-3 py-1.5 rounded text-slate-300 hover:bg-slate-800">APPOINTMENTS</button>
+            <button className="px-3 py-1.5 rounded text-slate-300 hover:bg-slate-800">SETTINGS</button>
+          </nav>
+
+          <div className="text-xs text-slate-400">
+            Caregiver: <strong className="text-white">Suresh Venigalla</strong>
+          </div>
         </div>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">
-          Multi-Profile Family Care & Permissions
-        </h1>
-        <p className="mt-1 text-sm text-slate-300">
-          Manage linked family profiles, view child/parent health summaries, and configure explicit access controls.
-        </p>
-      </div>
+      </header>
 
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900">Linked Family Members</h2>
-          <p className="text-xs text-slate-500">Profiles linked under your primary account</p>
-        </div>
-        <Button
-          onClick={() => setShowAddForm(!showAddForm)}
-          className="bg-teal-700 hover:bg-teal-800 text-white gap-2"
-        >
-          <Plus className="h-4 w-4" />
-          {showAddForm ? "Cancel" : "Link Family Member"}
-        </Button>
-      </div>
+      {/* Main Family Workspace */}
+      <div className="flex flex-1 max-w-[1920px] w-full mx-auto">
+        
+        {/* Left Family Navigation */}
+        <aside className="w-64 bg-slate-900 border-r border-slate-800 p-4 space-y-4 text-slate-300 shrink-0">
+          <div>
+            <span className="text-[10px] uppercase font-bold text-slate-500 block">FAMILY MEMBER</span>
+            <select
+              value={selectedPatient.id}
+              onChange={(e) => setSelectedPatient(MOCK_PATIENTS.find(p => p.id === e.target.value) || MOCK_PATIENTS[0])}
+              className="w-full bg-slate-800 border border-slate-700 text-white rounded p-2 text-xs font-bold mt-1 focus:outline-none focus:ring-2 focus:ring-teal-500"
+            >
+              {MOCK_PATIENTS.map(p => (
+                <option key={p.id} value={p.id}>{p.name} ({p.relationship || "Family Member"})</option>
+              ))}
+            </select>
+          </div>
 
-      {showAddForm && (
-        <Card className="mb-8 border-teal-200 bg-teal-50/40">
-          <CardHeader>
-            <CardTitle className="text-base text-slate-900">Link New Family Member</CardTitle>
-            <CardDescription className="text-xs">
-              Configure explicit consent permission level for this family link.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleAddLink} className="grid gap-4 sm:grid-cols-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Full Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Sarah Venigalla"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full rounded-md border bg-white p-2 text-sm focus:border-teal-600 focus:outline-none"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Relationship</label>
-                <select
-                  value={relationship}
-                  onChange={(e) => setRelationship(e.target.value)}
-                  className="w-full rounded-md border bg-white p-2 text-sm focus:border-teal-600 focus:outline-none"
+          <nav className="space-y-1 text-xs font-semibold pt-2">
+            {[
+              { id: "home", label: "Home Overview", icon: Home },
+              { id: "trends", label: "Thyroid Trends", icon: TrendingUp },
+              { id: "labs", label: "Lab Results", icon: FlaskConical },
+              { id: "meds", label: "Medications", icon: Pill },
+              { id: "diet", label: "Diet & Nutrition", icon: Utensils },
+              { id: "symptoms", label: "Symptoms Log", icon: Stethoscope },
+              { id: "reports", label: "Family Reports", icon: FileText },
+              { id: "appointments", label: "Appointments", icon: Calendar },
+            ].map(item => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id as any)}
+                  className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded text-left transition-colors ${
+                    activeTab === item.id ? "bg-teal-600 text-white font-bold" : "hover:bg-slate-800 text-slate-300"
+                  }`}
                 >
-                  <option value="Mother">Mother</option>
-                  <option value="Father">Father</option>
-                  <option value="Child">Child</option>
-                  <option value="Spouse">Spouse</option>
-                  <option value="Sibling">Sibling</option>
-                </select>
+                  <Icon className="w-4 h-4" />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          <div className="p-3 bg-slate-950/60 rounded border border-slate-800 text-[11px] text-slate-400 space-y-1">
+            <span className="font-bold text-slate-300 block flex items-center space-x-1">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Permission Protected</span>
+            </span>
+            <span>Displaying authorized records under family consent.</span>
+          </div>
+        </aside>
+
+        {/* Right Family Workspace Content */}
+        <main className="flex-1 p-6 space-y-6 overflow-y-auto">
+          
+          {/* Family Member Header */}
+          <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h1 className="text-lg font-bold text-slate-900 uppercase">{selectedPatient.name}</h1>
+              <p className="text-xs text-slate-500">{selectedPatient.age} yrs | {selectedPatient.sex} | {selectedPatient.condition}</p>
+            </div>
+
+            <div className="flex items-center space-x-6 text-xs border-l border-slate-200 pl-6">
+              <div>
+                <span className="text-slate-500 block uppercase font-semibold text-[10px]">Latest TSH</span>
+                <span className="text-lg font-black text-teal-900">{selectedPatient.latestTSH} mIU/L</span>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Permission Level</label>
-                <select
-                  value={permission}
-                  onChange={(e) => setPermission(e.target.value)}
-                  className="w-full rounded-md border bg-white p-2 text-sm focus:border-teal-600 focus:outline-none"
-                >
-                  <option value="VIEW_SUMMARY">View Summary Only</option>
-                  <option value="VIEW_LABS">View Lab History</option>
-                  <option value="VIEW_REPORTS">View Reports</option>
-                  <option value="GUARDIAN_FULL_ACCESS">Guardian Full Access</option>
-                </select>
+                <span className="text-slate-500 block uppercase font-semibold text-[10px]">Last Lab</span>
+                <span className="text-xs font-bold text-slate-800">{selectedPatient.lastLabDate}</span>
               </div>
-              <div className="sm:col-span-3">
-                <Button type="submit" className="bg-teal-700 text-white w-full sm:w-auto">
-                  Save Family Link
-                </Button>
+              <div>
+                <span className="text-slate-500 block uppercase font-semibold text-[10px]">Next Visit</span>
+                <span className="text-xs font-bold text-teal-700">{selectedPatient.nextVisit}</span>
               </div>
-            </form>
-          </CardContent>
-        </Card>
-      )}
+            </div>
+          </div>
 
-      {/* Cards Grid */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {links.map((link) => (
-          <Card key={link.id} className="border-slate-200 bg-white">
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-teal-100 text-teal-800 font-bold">
-                    {link.linkedUserName.charAt(0)}
+          {/* Module Content */}
+          {activeTab === "home" && (
+            <div className="bg-white p-6 rounded-lg border border-slate-200 shadow-xs space-y-4">
+              <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Family Member Health Summary</h2>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                <div className="p-4 bg-teal-50 rounded border border-teal-200">
+                  <span className="text-teal-800 font-bold block uppercase text-[10px]">Thyroid Status</span>
+                  <span className="text-2xl font-black text-teal-900">{selectedPatient.latestTSH} mIU/L</span>
+                  <span className="text-xs text-teal-700 block mt-1">Trend: {selectedPatient.trend}</span>
+                </div>
+
+                <div className="p-4 bg-slate-50 rounded border border-slate-200">
+                  <span className="text-slate-600 font-bold block uppercase text-[10px]">Current Medication</span>
+                  <span className="text-base font-extrabold text-slate-900 mt-1 block">{selectedPatient.medications[0]?.name || "None"}</span>
+                  <span className="text-xs text-slate-500 block">{selectedPatient.medications[0]?.dose || ""} daily</span>
+                </div>
+
+                <div className="p-4 bg-slate-50 rounded border border-slate-200">
+                  <span className="text-slate-600 font-bold block uppercase text-[10px]">Next Scheduled Appointment</span>
+                  <span className="text-base font-extrabold text-slate-900 mt-1 block">{selectedPatient.nextVisit}</span>
+                  <span className="text-xs text-slate-500 block">Endocrinology Clinic</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "trends" && (
+            <div className="bg-white p-6 rounded-lg border border-slate-200 shadow-xs space-y-4">
+              <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">TSH Trend Graph</h2>
+              <div className="h-44 bg-slate-50 rounded border border-slate-200 p-4 flex items-end justify-between">
+                {selectedPatient.labs.slice().reverse().map(lab => (
+                  <div key={lab.id} className="flex flex-col items-center">
+                    <div className="w-3 h-3 rounded-full bg-teal-700" style={{ marginBottom: `${(lab.tsh / 7) * 90}px` }} />
+                    <span className="text-[10px] font-bold">{lab.tsh}</span>
+                    <span className="text-[9px] text-slate-400">{lab.date.split(",")[0]}</span>
                   </div>
-                  <div>
-                    <CardTitle className="text-base font-bold text-slate-900">
-                      {link.linkedUserName}
-                    </CardTitle>
-                    <CardDescription className="text-xs">
-                      Relationship: {link.relationship} | ID: {link.linkedUserId}
-                    </CardDescription>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === "labs" && (
+            <div className="bg-white p-6 rounded-lg border border-slate-200 shadow-xs space-y-4">
+              <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Authorized Lab History</h2>
+              <table className="w-full text-left text-xs border-collapse">
+                <thead className="bg-slate-100 uppercase text-[10px] font-semibold text-slate-600">
+                  <tr>
+                    <th className="py-2.5 px-4">Date</th>
+                    <th className="py-2.5 px-4 text-right">TSH</th>
+                    <th className="py-2.5 px-4 text-right">Free T4</th>
+                    <th className="py-2.5 px-4 text-right">Free T3</th>
+                    <th className="py-2.5 px-4">Laboratory</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 font-medium">
+                  {selectedPatient.labs.map(lab => (
+                    <tr key={lab.id}>
+                      <td className="py-3 px-4 font-bold">{lab.date}</td>
+                      <td className="py-3 px-4 text-right font-black">{lab.tsh}</td>
+                      <td className="py-3 px-4 text-right">{lab.ft4}</td>
+                      <td className="py-3 px-4 text-right">{lab.ft3}</td>
+                      <td className="py-3 px-4 text-slate-600">{lab.labName}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {activeTab === "meds" && (
+            <div className="bg-white p-6 rounded-lg border border-slate-200 shadow-xs space-y-4">
+              <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Active Medications</h2>
+              <ul className="space-y-2 text-xs">
+                {selectedPatient.medications.map(med => (
+                  <li key={med.id} className="p-3 bg-slate-50 rounded border border-slate-200 flex justify-between">
+                    <div>
+                      <span className="font-bold text-slate-900 block">{med.name} — {med.dose}</span>
+                      <span className="text-slate-500">{med.frequency} at {med.timing}</span>
+                    </div>
+                    <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded text-[10px] self-center">ACTIVE</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {activeTab === "diet" && (
+            <div className="bg-white p-6 rounded-lg border border-slate-200 shadow-xs space-y-4">
+              <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Nutrition & Intake Summary</h2>
+              <div className="space-y-2 text-xs">
+                {selectedPatient.nutritionSummary.patterns.map((pat, i) => (
+                  <p key={i} className="p-3 bg-slate-50 rounded border border-slate-200">{pat}</p>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === "symptoms" && (
+            <div className="bg-white p-6 rounded-lg border border-slate-200 shadow-xs space-y-4">
+              <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Tracked Symptoms</h2>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                {selectedPatient.symptoms.filter(s => s.present).map((sym, i) => (
+                  <div key={i} className="p-3 bg-amber-50 rounded border border-amber-200 font-bold text-amber-900">
+                    <span>{sym.name}</span>
+                    <span className="block text-[10px] font-normal text-amber-800">Severity: {sym.severity} ({sym.frequency})</span>
                   </div>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleDelete(link.id)}
-                  className="text-slate-400 hover:text-red-600"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                ))}
               </div>
-            </CardHeader>
-            <CardContent className="space-y-3 pt-2 text-xs">
-              <div className="flex items-center justify-between rounded-md bg-slate-50 p-2.5">
-                <span className="flex items-center gap-1.5 text-slate-600 font-medium">
-                  <ShieldCheck className="h-4 w-4 text-teal-700" />
-                  Granted Access Level
-                </span>
-                <span className="rounded-full bg-teal-100 px-2.5 py-0.5 font-bold text-teal-800">
-                  {link.permissionLevel}
-                </span>
+            </div>
+          )}
+
+          {activeTab === "reports" && (
+            <div className="bg-white p-6 rounded-lg border border-slate-200 shadow-xs space-y-4">
+              <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Family Reports</h2>
+              <div className="space-y-2 text-xs">
+                {selectedPatient.reports.map(rep => (
+                  <div key={rep.id} className="p-3 bg-slate-50 rounded border border-slate-200 flex justify-between items-center">
+                    <span className="font-bold text-slate-900">{rep.title}</span>
+                    <button onClick={() => alert(`Downloading ${rep.title}`)} className="text-teal-700 font-bold hover:underline">Download PDF</button>
+                  </div>
+                ))}
               </div>
-              <div className="grid grid-cols-2 gap-2 text-slate-600">
-                <div className="rounded-md border p-2">
-                  <p className="text-[10px] text-slate-400">Latest TSH Status</p>
-                  <p className="font-bold text-slate-900 text-sm mt-0.5">2.45 mIU/L (Normal)</p>
-                </div>
-                <div className="rounded-md border p-2">
-                  <p className="text-[10px] text-slate-400">Active Medication</p>
-                  <p className="font-bold text-slate-900 text-sm mt-0.5">Levothyroxine 50 mcg</p>
-                </div>
+            </div>
+          )}
+
+          {activeTab === "appointments" && (
+            <div className="bg-white p-6 rounded-lg border border-slate-200 shadow-xs space-y-4">
+              <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Appointments</h2>
+              <div className="p-4 bg-teal-50 rounded border border-teal-200 text-xs">
+                <span className="font-bold text-teal-900 block text-sm">Next Visit: {selectedPatient.nextVisit}</span>
+                <span className="text-teal-700 block mt-1">Endocrinology Specialist Consult</span>
               </div>
-            </CardContent>
-          </Card>
-        ))}
+            </div>
+          )}
+
+        </main>
       </div>
-    </main>
+
+    </div>
   );
 }
