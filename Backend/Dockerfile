@@ -6,11 +6,12 @@ WORKDIR /build
 
 COPY Package.swift ./
 COPY Sources ./Sources
+COPY Tests ./Tests
 COPY Public ./Public
 COPY Resources ./Resources
 
 RUN swift package resolve
-RUN swift build -c release --static-swift-stdlib
+RUN swift build -c release --product Run --static-swift-stdlib
 
 FROM ubuntu:22.04 AS runtime
 
@@ -32,7 +33,7 @@ RUN useradd --create-home --uid 10001 vapor
 
 WORKDIR /app
 
-COPY --from=build /build/.build/release/App /app/App
+COPY --from=build /build/.build/release/Run /app/App
 COPY --from=build /build/Public /app/Public
 COPY --from=build /build/Resources /app/Resources
 
