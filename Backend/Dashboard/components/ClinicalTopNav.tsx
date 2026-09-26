@@ -13,7 +13,8 @@ import {
   Eye, 
   UserCheck, 
   ChevronDown,
-  Stethoscope
+  Stethoscope,
+  Utensils
 } from "lucide-react";
 
 export default function ClinicalTopNav() {
@@ -21,6 +22,7 @@ export default function ClinicalTopNav() {
 
   const navItems = [
     { label: "Dashboard", href: "/clinician", icon: Activity },
+    { label: "Food Analysis", href: "/clinician/food-analysis", icon: Utensils },
     { label: "Patient Search", href: "/clinician/search", icon: Search },
     { label: "Notifications", href: "/clinician/notifications", icon: Bell },
     { label: "Reports", href: "/clinician/reports", icon: FileText },
@@ -52,7 +54,7 @@ export default function ClinicalTopNav() {
                   href={item.href}
                   className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                     isActive
-                      ? "bg-teal-600 text-white shadow-sm"
+                      ? "bg-teal-600 text-white shadow-xs"
                       : "text-slate-300 hover:bg-slate-800 hover:text-white"
                   }`}
                 >
