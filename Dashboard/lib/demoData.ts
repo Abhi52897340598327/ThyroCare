@@ -103,6 +103,7 @@ export interface AuditRecord {
 export interface PatientProfile {
   id: string;
   name: string;
+  mrn?: string;
   age: number;
   sex: "Female" | "Male";
   condition: string;
@@ -141,6 +142,7 @@ export const MOCK_PATIENTS: PatientProfile[] = [
   {
     id: "p1",
     name: "Eleanor Vance",
+    mrn: "THY-84920",
     age: 48,
     sex: "Female",
     condition: "Primary Hypothyroidism",
@@ -235,6 +237,7 @@ export const MOCK_PATIENTS: PatientProfile[] = [
   {
     id: "p2",
     name: "Marcus Thorne",
+    mrn: "THY-84921",
     age: 52,
     sex: "Male",
     condition: "Post-Thyroidectomy Hypothyroidism",
@@ -281,6 +284,7 @@ export const MOCK_PATIENTS: PatientProfile[] = [
   {
     id: "p3",
     name: "Sophia Martinez",
+    mrn: "THY-84922",
     age: 34,
     sex: "Female",
     condition: "Hashimoto's Thyroiditis",
@@ -333,6 +337,7 @@ export const MOCK_PATIENTS: PatientProfile[] = [
   {
     id: "p4",
     name: "Arthur Pendelton",
+    mrn: "THY-84923",
     age: 67,
     sex: "Male",
     condition: "Hyperthyroidism (Subclinical)",
@@ -379,6 +384,7 @@ export const MOCK_PATIENTS: PatientProfile[] = [
   {
     id: "p5",
     name: "Clara Oswald",
+    mrn: "THY-84924",
     age: 29,
     sex: "Female",
     condition: "Thyroid Nodule (Benign)",
@@ -417,6 +423,7 @@ export const MOCK_PATIENTS: PatientProfile[] = [
   {
     id: "p6",
     name: "Benjamin Sisko",
+    mrn: "THY-84925",
     age: 55,
     sex: "Male",
     condition: "Post-RAI Hypothyroidism",
@@ -449,6 +456,7 @@ export const MOCK_PATIENTS: PatientProfile[] = [
   {
     id: "p7",
     name: "Diana Prince",
+    mrn: "THY-84926",
     age: 41,
     sex: "Female",
     condition: "Hypothyroidism on Armour Thyroid",
@@ -481,6 +489,7 @@ export const MOCK_PATIENTS: PatientProfile[] = [
   {
     id: "p8",
     name: "Lucas Scott",
+    mrn: "THY-84927",
     age: 28,
     sex: "Male",
     condition: "Subclinical Hypothyroidism",
@@ -515,6 +524,7 @@ export const MOCK_PATIENTS: PatientProfile[] = [
   {
     id: "p9",
     name: "Hannah Abbott",
+    mrn: "THY-84928",
     age: 36,
     sex: "Female",
     condition: "Postpartum Thyroiditis",
@@ -550,6 +560,7 @@ export const MOCK_PATIENTS: PatientProfile[] = [
   {
     id: "p10",
     name: "Victor Stone",
+    mrn: "THY-84929",
     age: 44,
     sex: "Male",
     condition: "Primary Hypothyroidism",

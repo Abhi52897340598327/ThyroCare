@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import ClinicalTopNav from "@/components/ClinicalTopNav";
+import ClinicalAppShell from "@/components/ClinicalAppShell";
 import { MOCK_PATIENTS, PatientProfile } from "@/lib/demoData";
 import { 
   Users, 
@@ -79,10 +79,8 @@ export default function GlobalClinicianDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-900">
-      <ClinicalTopNav />
-
-      <main className="flex-1 max-w-[1920px] w-full mx-auto p-6 space-y-6">
+    <ClinicalAppShell>
+      <div className="max-w-[1600px] mx-auto p-4 sm:p-6 space-y-6">
         
         {/* Clinician Welcome Banner */}
         <div className="bg-slate-900 text-white rounded-lg p-6 shadow-md border border-slate-800 flex flex-wrap items-center justify-between gap-4">
@@ -291,7 +289,7 @@ export default function GlobalClinicianDashboard() {
           </div>
         </div>
 
-      </main>
-    </div>
+      </div>
+    </ClinicalAppShell>
   );
 }
