@@ -1,7 +1,7 @@
 "use client";
 
 import PatientWorkspaceLayout from "@/components/PatientWorkspaceLayout";
-import { getPatientById, MOCK_PATIENTS } from "@/lib/demoData";
+import { getPatientById } from "@/lib/demoData";
 import Link from "next/link";
 import { 
   Activity, 
@@ -11,12 +11,6 @@ import {
   Calendar, 
   ChevronRight
 } from "lucide-react";
-
-export function generateStaticParams() {
-  return MOCK_PATIENTS.map((p) => ({
-    patient_id: p.id,
-  }));
-}
 
 export default function PatientHomePage({
   params,
