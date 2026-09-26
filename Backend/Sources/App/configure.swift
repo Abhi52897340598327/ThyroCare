@@ -886,9 +886,23 @@ public func configure(_ app: Application) throws {
     app.views.use(.leaf)
     app.routes.defaultMaxBodySize = "16mb"
 
+    @Sendable func servePublicHTML(req: Request, path: String) -> Response {
+        let fullPath = app.directory.publicDirectory + path
+        if FileManager.default.fileExists(atPath: fullPath),
+           let data = FileManager.default.contents(atPath: fullPath) {
+            return Response(status: .ok, headers: ["content-type": "text/html; charset=utf-8"], body: .init(data: data))
+        }
+        let fallbackPath = app.directory.publicDirectory + "index.html"
+        if FileManager.default.fileExists(atPath: fallbackPath),
+           let data = FileManager.default.contents(atPath: fallbackPath) {
+            return Response(status: .ok, headers: ["content-type": "text/html; charset=utf-8"], body: .init(data: data))
+        }
+        return dashboardResponse()
+    }
+
     // MARK: - Core Root & Health
-    app.get { _ -> Response in
-        dashboardResponse()
+    app.get { req -> Response in
+        servePublicHTML(req: req, path: "index.html")
     }
 
     app.get("health") { _ in
@@ -900,6 +914,34 @@ public func configure(_ app: Application) throws {
         ]
     }
 
+    // MARK: - Clinician Web App Static Routes
+    app.get("clinician") { req -> Response in
+        servePublicHTML(req: req, path: "clinician.html")
+    }
+
+    app.get("clinician", "**") { req -> Response in
+        let uriPath = req.url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let htmlPath = uriPath + ".html"
+        let publicHTML = app.directory.publicDirectory + htmlPath
+        if FileManager.default.fileExists(atPath: publicHTML),
+           let data = FileManager.default.contents(atPath: publicHTML) {
+            return Response(status: .ok, headers: ["content-type": "text/html; charset=utf-8"], body: .init(data: data))
+        }
+        return servePublicHTML(req: req, path: "clinician.html")
+    }
+
+    app.get("family") { req -> Response in
+        servePublicHTML(req: req, path: "family.html")
+    }
+
+    app.get("patient") { req -> Response in
+        servePublicHTML(req: req, path: "patient.html")
+    }
+
+    app.get("providers") { req -> Response in
+        servePublicHTML(req: req, path: "providers.html")
+    }
+
     // MARK: - Debug & Telemetry Portal (SEPARATE LINK)
     app.get("debug") { _ -> Response in
         debugDashboardResponse()
@@ -909,12 +951,12 @@ public func configure(_ app: Application) throws {
         debugDashboardResponse()
     }
 
-    app.get("dashboard") { _ -> Response in
-        dashboardResponse()
+    app.get("dashboard") { req -> Response in
+        servePublicHTML(req: req, path: "index.html")
     }
 
-    app.get("dashboard", "") { _ -> Response in
-        dashboardResponse()
+    app.get("dashboard", "") { req -> Response in
+        servePublicHTML(req: req, path: "index.html")
     }
 
     // MARK: - Auth Routes
