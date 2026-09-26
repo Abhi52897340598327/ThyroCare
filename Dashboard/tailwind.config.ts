@@ -15,6 +15,15 @@ const config: Config = {
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        thyro: {
+          teal: "#0D9494",
+          mint: "#D4F5ED",
+          navy: "#051F38",
+          coral: "#EC5C4F",
+          amber: "#F3AD3A",
+          violet: "#7354D1",
+          ink: "#12171F"
+        },
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))"

@@ -192,7 +192,7 @@ export default function FoodAnalysisClient() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 font-sans">
+    <div className="min-h-screen bg-slate-100 text-thyro-ink font-sans">
       <ClinicalTopNav />
 
       <main className="max-w-[1600px] mx-auto p-4 sm:p-6 space-y-6">
@@ -201,13 +201,13 @@ export default function FoodAnalysisClient() {
         <div className="bg-white rounded-lg border border-slate-200 p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center space-x-2">
-              <span className="bg-teal-100 text-teal-800 text-[11px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border border-teal-200">
+              <span className="bg-thyro-mint text-thyro-teal text-[11px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border border-teal-200">
                 Clinical Module
               </span>
               <span className="text-xs text-slate-500 font-mono">USDA FDC REST API v2.4</span>
             </div>
-            <h1 className="text-xl font-extrabold text-slate-900 mt-1 uppercase tracking-tight flex items-center space-x-2">
-              <Utensils className="w-5 h-5 text-teal-600" />
+            <h1 className="text-xl font-extrabold text-thyro-navy mt-1 uppercase tracking-tight flex items-center space-x-2">
+              <Utensils className="w-5 h-5 text-thyro-teal" />
               <span>Food Photo Scan & USDA Thyroid Impact Distribution</span>
             </h1>
             <p className="text-xs text-slate-600 mt-0.5">
@@ -219,7 +219,7 @@ export default function FoodAnalysisClient() {
             <button
               onClick={handleScanSimulation}
               disabled={isSimulatingScan}
-              className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs px-4 py-2.5 rounded-lg flex items-center space-x-2 shadow-xs transition-colors disabled:opacity-50"
+              className="bg-thyro-teal hover:bg-teal-700 text-white font-semibold text-xs px-4 py-2.5 rounded-lg flex items-center space-x-2 shadow-xs transition-colors disabled:opacity-50"
             >
               {isSimulatingScan ? (
                 <RefreshCw className="w-4 h-4 animate-spin text-white" />
@@ -239,7 +239,7 @@ export default function FoodAnalysisClient() {
               onClick={() => setSelectedMeal(meal)}
               className={`cursor-pointer bg-white rounded-lg border p-4 shadow-xs transition-all flex items-center space-x-3.5 ${
                 selectedMeal.id === meal.id
-                  ? "border-teal-600 ring-2 ring-teal-500/20 bg-teal-50/20"
+                  ? "border-thyro-teal ring-2 ring-teal-500/20 bg-thyro-mint/30"
                   : "border-slate-200 hover:border-slate-300"
               }`}
             >
@@ -248,10 +248,10 @@ export default function FoodAnalysisClient() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-teal-700 uppercase tracking-wide">FDC #{meal.usdaFdcId}</span>
+                  <span className="text-[10px] font-bold text-thyro-teal uppercase tracking-wide">FDC #{meal.usdaFdcId}</span>
                   <span className="text-[10px] font-extrabold text-slate-500">{Math.round(meal.confidence * 100)}% AI Match</span>
                 </div>
-                <h3 className="text-xs font-bold text-slate-900 truncate">{meal.name}</h3>
+                <h3 className="text-xs font-bold text-thyro-navy truncate">{meal.name}</h3>
                 <p className="text-[11px] text-slate-500 truncate mt-0.5">{meal.usdaMatchName}</p>
               </div>
             </div>
@@ -266,20 +266,20 @@ export default function FoodAnalysisClient() {
             <div className="bg-white rounded-lg border border-slate-200 p-5 shadow-xs space-y-4">
               <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                 <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center space-x-2">
-                  <Camera className="w-4 h-4 text-teal-600" />
+                  <Camera className="w-4 h-4 text-thyro-teal" />
                   <span>Captured Meal Photo</span>
                 </h2>
-                <span className="text-[11px] font-mono font-bold text-teal-600 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                <span className="text-[11px] font-mono font-bold text-thyro-teal bg-thyro-mint px-2 py-0.5 rounded border border-teal-200">
                   {Math.round(selectedMeal.confidence * 100)}% Vision Confidence
                 </span>
               </div>
 
-              <div className="relative rounded-lg overflow-hidden border border-slate-200 aspect-video bg-slate-950">
+              <div className="relative rounded-lg overflow-hidden border border-slate-200 aspect-video bg-thyro-navy">
                 <img src={selectedMeal.image} alt={selectedMeal.name} className="w-full h-full object-cover" />
-                <div className="absolute bottom-2 left-2 right-2 bg-slate-900/85 backdrop-blur-xs p-2.5 rounded text-white text-xs flex items-center justify-between border border-slate-700">
+                <div className="absolute bottom-2 left-2 right-2 bg-thyro-navy/90 backdrop-blur-xs p-2.5 rounded text-white text-xs flex items-center justify-between border border-slate-700">
                   <div className="truncate pr-2">
                     <p className="font-bold text-slate-100 truncate">{selectedMeal.name}</p>
-                    <p className="text-[10px] text-slate-400 font-mono truncate">Query: &quot;{selectedMeal.usdaQuery}&quot;</p>
+                    <p className="text-[10px] text-slate-300 font-mono truncate">Query: &quot;{selectedMeal.usdaQuery}&quot;</p>
                   </div>
                   <CheckCircle2 className="w-4 h-4 text-teal-400 shrink-0" />
                 </div>
@@ -292,40 +292,40 @@ export default function FoodAnalysisClient() {
                   <div>
                     <div className="flex justify-between font-semibold text-slate-700 mb-1">
                       <span>Protein</span>
-                      <span className="font-mono text-teal-700">{selectedMeal.protein}%</span>
+                      <span className="font-mono text-thyro-teal">{selectedMeal.protein}%</span>
                     </div>
                     <div className="w-full bg-slate-100 rounded-full h-2">
-                      <div className="bg-teal-600 h-2 rounded-full" style={{ width: `${selectedMeal.protein}%` }} />
+                      <div className="bg-thyro-teal h-2 rounded-full" style={{ width: `${selectedMeal.protein}%` }} />
                     </div>
                   </div>
 
                   <div>
                     <div className="flex justify-between font-semibold text-slate-700 mb-1">
                       <span>Carbohydrates</span>
-                      <span className="font-mono text-amber-700">{selectedMeal.carbs}%</span>
+                      <span className="font-mono text-thyro-amber">{selectedMeal.carbs}%</span>
                     </div>
                     <div className="w-full bg-slate-100 rounded-full h-2">
-                      <div className="bg-amber-500 h-2 rounded-full" style={{ width: `${selectedMeal.carbs}%` }} />
+                      <div className="bg-thyro-amber h-2 rounded-full" style={{ width: `${selectedMeal.carbs}%` }} />
                     </div>
                   </div>
 
                   <div>
                     <div className="flex justify-between font-semibold text-slate-700 mb-1">
                       <span>Vitamins & Co-factors</span>
-                      <span className="font-mono text-purple-700">{selectedMeal.vitamins}%</span>
+                      <span className="font-mono text-thyro-violet">{selectedMeal.vitamins}%</span>
                     </div>
                     <div className="w-full bg-slate-100 rounded-full h-2">
-                      <div className="bg-purple-600 h-2 rounded-full" style={{ width: `${selectedMeal.vitamins}%` }} />
+                      <div className="bg-thyro-violet h-2 rounded-full" style={{ width: `${selectedMeal.vitamins}%` }} />
                     </div>
                   </div>
 
                   <div>
                     <div className="flex justify-between font-semibold text-slate-700 mb-1">
                       <span>Fruits & Vegetables</span>
-                      <span className="font-mono text-rose-700">{selectedMeal.produce}%</span>
+                      <span className="font-mono text-thyro-coral">{selectedMeal.produce}%</span>
                     </div>
                     <div className="w-full bg-slate-100 rounded-full h-2">
-                      <div className="bg-rose-500 h-2 rounded-full" style={{ width: `${selectedMeal.produce}%` }} />
+                      <div className="bg-thyro-coral h-2 rounded-full" style={{ width: `${selectedMeal.produce}%` }} />
                     </div>
                   </div>
                 </div>
@@ -343,7 +343,7 @@ export default function FoodAnalysisClient() {
                   onClick={() => setActiveTab("overview")}
                   className={`px-4 py-3 text-xs font-bold uppercase tracking-wider flex items-center space-x-2 border-b-2 transition-colors ${
                     activeTab === "overview"
-                      ? "border-teal-600 text-teal-700 bg-white"
+                      ? "border-thyro-teal text-thyro-teal bg-white"
                       : "border-transparent text-slate-600 hover:text-slate-900"
                   }`}
                 >
@@ -355,7 +355,7 @@ export default function FoodAnalysisClient() {
                   onClick={() => setActiveTab("usda")}
                   className={`px-4 py-3 text-xs font-bold uppercase tracking-wider flex items-center space-x-2 border-b-2 transition-colors ${
                     activeTab === "usda"
-                      ? "border-teal-600 text-teal-700 bg-white"
+                      ? "border-thyro-teal text-thyro-teal bg-white"
                       : "border-transparent text-slate-600 hover:text-slate-900"
                   }`}
                 >
@@ -367,7 +367,7 @@ export default function FoodAnalysisClient() {
                   onClick={() => setActiveTab("hormones")}
                   className={`px-4 py-3 text-xs font-bold uppercase tracking-wider flex items-center space-x-2 border-b-2 transition-colors ${
                     activeTab === "hormones"
-                      ? "border-teal-600 text-teal-700 bg-white"
+                      ? "border-thyro-teal text-thyro-teal bg-white"
                       : "border-transparent text-slate-600 hover:text-slate-900"
                   }`}
                 >
@@ -379,7 +379,7 @@ export default function FoodAnalysisClient() {
                   onClick={() => setActiveTab("json")}
                   className={`px-4 py-3 text-xs font-bold uppercase tracking-wider flex items-center space-x-2 border-b-2 transition-colors ${
                     activeTab === "json"
-                      ? "border-teal-600 text-teal-700 bg-white"
+                      ? "border-thyro-teal text-thyro-teal bg-white"
                       : "border-transparent text-slate-600 hover:text-slate-900"
                   }`}
                 >
@@ -397,7 +397,7 @@ export default function FoodAnalysisClient() {
                     <div className="bg-slate-50 border border-slate-200 p-4 rounded-lg flex items-center justify-between">
                       <div>
                         <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Matched USDA Item</span>
-                        <h3 className="text-sm font-extrabold text-slate-900">{selectedMeal.usdaMatchName}</h3>
+                        <h3 className="text-sm font-extrabold text-thyro-navy">{selectedMeal.usdaMatchName}</h3>
                         <p className="text-xs text-slate-500 font-mono mt-0.5">FDC ID: #{selectedMeal.usdaFdcId} | Category: {selectedMeal.usdaDataType}</p>
                       </div>
                       <div className="text-right">
@@ -408,30 +408,30 @@ export default function FoodAnalysisClient() {
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <div className="p-3 bg-teal-50 border border-teal-200 rounded-lg text-center">
-                        <span className="text-[10px] font-bold text-teal-700 uppercase">Iodine (I)</span>
-                        <p className="text-lg font-extrabold text-teal-950 mt-1">{selectedMeal.iodineMicrograms} µg</p>
+                      <div className="p-3 bg-thyro-mint/40 border border-teal-200 rounded-lg text-center">
+                        <span className="text-[10px] font-bold text-thyro-teal uppercase">Iodine (I)</span>
+                        <p className="text-lg font-extrabold text-thyro-navy mt-1">{selectedMeal.iodineMicrograms} µg</p>
                       </div>
 
                       <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-center">
-                        <span className="text-[10px] font-bold text-amber-700 uppercase">Selenium (Se)</span>
-                        <p className="text-lg font-extrabold text-amber-950 mt-1">{selectedMeal.seleniumMicrograms} µg</p>
+                        <span className="text-[10px] font-bold text-thyro-amber uppercase">Selenium (Se)</span>
+                        <p className="text-lg font-extrabold text-thyro-navy mt-1">{selectedMeal.seleniumMicrograms} µg</p>
                       </div>
 
                       <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg text-center">
-                        <span className="text-[10px] font-bold text-purple-700 uppercase">Calcium (Ca)</span>
-                        <p className="text-lg font-extrabold text-purple-950 mt-1">{selectedMeal.calciumMilligrams} mg</p>
+                        <span className="text-[10px] font-bold text-thyro-violet uppercase">Calcium (Ca)</span>
+                        <p className="text-lg font-extrabold text-thyro-navy mt-1">{selectedMeal.calciumMilligrams} mg</p>
                       </div>
 
                       <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-center">
-                        <span className="text-[10px] font-bold text-rose-700 uppercase">Sodium (Na)</span>
-                        <p className="text-lg font-extrabold text-rose-950 mt-1">{selectedMeal.sodiumMilligrams} mg</p>
+                        <span className="text-[10px] font-bold text-thyro-coral uppercase">Sodium (Na)</span>
+                        <p className="text-lg font-extrabold text-thyro-navy mt-1">{selectedMeal.sodiumMilligrams} mg</p>
                       </div>
                     </div>
 
                     <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg space-y-1.5 text-xs text-amber-950">
                       <div className="flex items-center space-x-2 font-bold text-amber-900">
-                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                        <AlertTriangle className="w-4 h-4 text-thyro-amber shrink-0" />
                         <span>Levothyroxine & Synthroid GI Absorption Warning</span>
                       </div>
                       <p className="text-slate-700">{selectedMeal.levothyroxineAbsorptionRisk}</p>
@@ -450,12 +450,12 @@ export default function FoodAnalysisClient() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                       <div className="p-3 bg-slate-50 rounded border border-slate-200 space-y-1">
                         <span className="text-slate-500 font-bold uppercase text-[10px]">FDC Item Description</span>
-                        <p className="font-bold text-slate-900">{selectedMeal.usdaMatchName}</p>
+                        <p className="font-bold text-thyro-navy">{selectedMeal.usdaMatchName}</p>
                       </div>
 
                       <div className="p-3 bg-slate-50 rounded border border-slate-200 space-y-1">
                         <span className="text-slate-500 font-bold uppercase text-[10px]">Query Input Parameters</span>
-                        <p className="font-mono text-teal-700 font-semibold">&quot;{selectedMeal.usdaQuery}&quot;</p>
+                        <p className="font-mono text-thyro-teal font-semibold">&quot;{selectedMeal.usdaQuery}&quot;</p>
                       </div>
 
                       <div className="p-3 bg-slate-50 rounded border border-slate-200 space-y-1">
@@ -481,23 +481,23 @@ export default function FoodAnalysisClient() {
                         </thead>
                         <tbody className="divide-y divide-slate-200 font-medium">
                           <tr>
-                            <td className="py-2.5 px-3 font-bold text-slate-900">Iodine (I)</td>
-                            <td className="py-2.5 px-3 text-teal-700 font-bold font-mono">{selectedMeal.iodineMicrograms} µg</td>
+                            <td className="py-2.5 px-3 font-bold text-thyro-navy">Iodine (I)</td>
+                            <td className="py-2.5 px-3 text-thyro-teal font-bold font-mono">{selectedMeal.iodineMicrograms} µg</td>
                             <td className="py-2.5 px-3 text-slate-600">Essential substrate for T4/T3 synthesis</td>
                           </tr>
                           <tr>
-                            <td className="py-2.5 px-3 font-bold text-slate-900">Selenium (Se)</td>
-                            <td className="py-2.5 px-3 text-amber-700 font-bold font-mono">{selectedMeal.seleniumMicrograms} µg</td>
+                            <td className="py-2.5 px-3 font-bold text-thyro-navy">Selenium (Se)</td>
+                            <td className="py-2.5 px-3 text-thyro-amber font-bold font-mono">{selectedMeal.seleniumMicrograms} µg</td>
                             <td className="py-2.5 px-3 text-slate-600">Deiodinase enzyme cofactor (T4 to T3 conversion)</td>
                           </tr>
                           <tr>
-                            <td className="py-2.5 px-3 font-bold text-slate-900">Calcium (Ca)</td>
-                            <td className="py-2.5 px-3 text-purple-700 font-bold font-mono">{selectedMeal.calciumMilligrams} mg</td>
+                            <td className="py-2.5 px-3 font-bold text-thyro-navy">Calcium (Ca)</td>
+                            <td className="py-2.5 px-3 text-thyro-violet font-bold font-mono">{selectedMeal.calciumMilligrams} mg</td>
                             <td className="py-2.5 px-3 text-slate-600">Binds levothyroxine in GI tract if taken within 4 hrs</td>
                           </tr>
                           <tr>
-                            <td className="py-2.5 px-3 font-bold text-slate-900">Sodium (Na)</td>
-                            <td className="py-2.5 px-3 text-rose-700 font-bold font-mono">{selectedMeal.sodiumMilligrams} mg</td>
+                            <td className="py-2.5 px-3 font-bold text-thyro-navy">Sodium (Na)</td>
+                            <td className="py-2.5 px-3 text-thyro-coral font-bold font-mono">{selectedMeal.sodiumMilligrams} mg</td>
                             <td className="py-2.5 px-3 text-slate-600">General metabolic fluid balance indicator</td>
                           </tr>
                         </tbody>
@@ -521,10 +521,10 @@ export default function FoodAnalysisClient() {
                       {/* TSH Gauge */}
                       <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-center space-y-2">
                         <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">TSH Level Impact</span>
-                        <div className="text-2xl font-black font-mono text-teal-700">
+                        <div className="text-2xl font-black font-mono text-thyro-teal">
                           {selectedMeal.tshPercentChange >= 0 ? `+${selectedMeal.tshPercentChange}%` : `${selectedMeal.tshPercentChange}%`}
                         </div>
-                        <span className="text-[11px] font-bold text-teal-800 bg-teal-100 px-2 py-0.5 rounded border border-teal-200 block">
+                        <span className="text-[11px] font-bold text-thyro-teal bg-thyro-mint px-2 py-0.5 rounded border border-teal-200 block">
                           {selectedMeal.tshImpact}
                         </span>
                       </div>
@@ -532,7 +532,7 @@ export default function FoodAnalysisClient() {
                       {/* Free T3 Gauge */}
                       <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-center space-y-2">
                         <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Free T3 Shift</span>
-                        <div className="text-2xl font-black font-mono text-amber-700">
+                        <div className="text-2xl font-black font-mono text-thyro-amber">
                           {selectedMeal.t3PercentChange >= 0 ? `+${selectedMeal.t3PercentChange}%` : `${selectedMeal.t3PercentChange}%`}
                         </div>
                         <span className="text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded border border-amber-200 block">
@@ -543,7 +543,7 @@ export default function FoodAnalysisClient() {
                       {/* Free T4 Gauge */}
                       <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-center space-y-2">
                         <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Free T4 Shift</span>
-                        <div className="text-2xl font-black font-mono text-purple-700">
+                        <div className="text-2xl font-black font-mono text-thyro-violet">
                           {selectedMeal.t4PercentChange >= 0 ? `+${selectedMeal.t4PercentChange}%` : `${selectedMeal.t4PercentChange}%`}
                         </div>
                         <span className="text-[11px] font-bold text-purple-800 bg-purple-100 px-2 py-0.5 rounded border border-purple-200 block">
@@ -572,14 +572,14 @@ export default function FoodAnalysisClient() {
                       <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Raw USDA FDC JSON Response Payload</h3>
                       <button
                         onClick={handleCopyJson}
-                        className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-3 py-1.5 rounded flex items-center space-x-1.5 transition-colors"
+                        className="bg-thyro-navy hover:bg-slate-800 text-white text-xs font-semibold px-3 py-1.5 rounded flex items-center space-x-1.5 transition-colors"
                       >
                         {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                         <span>{copied ? "Copied JSON!" : "Copy JSON Payload"}</span>
                       </button>
                     </div>
 
-                    <pre className="p-4 bg-slate-950 text-slate-100 text-xs font-mono rounded-lg overflow-x-auto border border-slate-800 max-h-96">
+                    <pre className="p-4 bg-thyro-navy text-slate-100 text-xs font-mono rounded-lg overflow-x-auto border border-slate-800 max-h-96">
                       {selectedMeal.rawUsdaJsonResponse}
                     </pre>
                   </div>

@@ -10,19 +10,19 @@
     --card-foreground: 215 28% 17%;
     --popover: 0 0% 100%;
     --popover-foreground: 215 28% 17%;
-    --primary: 174 72% 32%;
+    --primary: 180 84% 32%; /* #0D9494 ThyroUI.teal */
     --primary-foreground: 180 100% 98%;
     --secondary: 210 22% 94%;
     --secondary-foreground: 215 28% 17%;
     --muted: 210 22% 94%;
     --muted-foreground: 215 13% 45%;
-    --accent: 187 64% 92%;
+    --accent: 165 65% 90%; /* #D4F5ED ThyroUI.mint */
     --accent-foreground: 185 80% 21%;
-    --destructive: 0 74% 52%;
+    --destructive: 3 82% 56%; /* #EC5C4F ThyroUI.coral */
     --destructive-foreground: 0 0% 100%;
     --border: 214 25% 88%;
     --input: 214 25% 88%;
-    --ring: 174 72% 32%;
+    --ring: 180 84% 32%;
     --radius: 0.5rem;
   }
 
