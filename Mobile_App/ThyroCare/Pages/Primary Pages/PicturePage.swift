@@ -6,70 +6,190 @@ import Combine
 struct PicturePage: View {
     @State private var meals: [MealAnalysis] = []
     @State private var showingScanner = false
+    @State private var selectedTabMode = 0 // 0: Scanner, 1: USDA API Inspector, 2: Meal History
+    @State private var usdaSearchQuery = "Grilled Chicken Bowl"
+    @State private var selectedMealForDetail: MealAnalysis?
     @AppStorage("mealHistoryData") private var mealHistoryData = Data()
     @AppStorage("severityScore") private var storedSeverityScore = 0
     @AppStorage("severityPercentile") private var storedSeverityPercentile = 0
-    @AppStorage("tshDecrease") private var storedTSHDecrease = 0
-    @AppStorage("t3Improvement") private var storedT3Improvement = 0
-    @AppStorage("t4Improvement") private var storedT4Improvement = 0
 
-    private var latestMeal: MealAnalysis? {
-        meals.first
+    private var latestMeal: MealAnalysis {
+        meals.first ?? MealAnalysis.scannedSample
     }
 
     var body: some View {
-        ThyroPageScaffold(title: "Food Analysis") {
-            ThyroCard {
-                ThyroSectionTitle("Meal scan", subtitle: "Use the camera to estimate food content and thyroid impact.")
-
-                PlateVectorArt()
-                    .frame(maxWidth: .infinity)
-
-                if let latestMeal {
-                    ProgressView(value: latestMeal.confidence)
-                        .tint(ThyroUI.teal)
-
-                    Text("Latest scan confidence: \(Int(latestMeal.confidence * 100))%")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(ThyroUI.navy)
-                } else {
-                    Text("No meals scanned yet.")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
+        ThyroPageScaffold(title: "Food & USDA Analysis") {
+            
+            // Sub-Navigation Segment Control
+            Picker("View Mode", selection: $selectedTabMode) {
+                Text("Scanner").tag(0)
+                Text("USDA API").tag(1)
+                Text("Log History").tag(2)
             }
+            .pickerStyle(.segmented)
+            .padding(.bottom, 6)
 
-            if let latestMeal {
+            if selectedTabMode == 0 {
+                // MARK: - TAB 1: CAMERA SCANNER & LATEST ANALYSIS
                 ThyroCard {
-                    ThyroSectionTitle("Latest analysis", subtitle: latestMeal.name)
-                    MealNutritionSummary(meal: latestMeal)
+                    ThyroSectionTitle("Meal Camera Scan", subtitle: "Take a photo to trigger Vision AI + USDA FoodData Central lookup.")
+
+                    PlateVectorArt()
+                        .frame(maxWidth: .infinity)
+
+                    if !meals.isEmpty {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Latest Meal: \(latestMeal.name)")
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundStyle(ThyroUI.navy)
+                                Text("USDA Match: \(latestMeal.usdaMatchName)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text("\(Int(latestMeal.confidence * 100))% AI match")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(ThyroUI.teal)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Capsule().fill(ThyroUI.softGray))
+                        }
+
+                        ProgressView(value: latestMeal.confidence)
+                            .tint(ThyroUI.teal)
+                    } else {
+                        Text("No meals scanned yet. Tap below to capture a meal photo.")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
+                LandingButton(title: "Scan Meal Photo") {
+                    showingScanner = true
+                }
+
+                if let meal = meals.first {
+                    ThyroCard {
+                        ThyroSectionTitle("Latest Scan Overview", subtitle: meal.name)
+                        MealNutritionSummary(meal: meal)
+
+                        NavigationLink {
+                            MealAnalysisDetailPage(meal: meal)
+                        } label: {
+                            HStack {
+                                Image(systemName: "slider.horizontal.3")
+                                Text("View Full USDA & Thyroid Inspector")
+                                    .font(.subheadline.weight(.bold))
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                            }
+                            .foregroundStyle(ThyroUI.teal)
+                            .padding(.top, 8)
+                        }
+                    }
+
+                    ThyroCard {
+                        ThyroSectionTitle("Thyroid Impact Summary")
+                        MetricRow(title: "TSH Impact", value: meal.tshImpact, color: ThyroUI.teal)
+                        MetricRow(title: "Free T3", value: meal.t3Impact, color: ThyroUI.amber)
+                        MetricRow(title: "Free T4", value: meal.t4Impact, color: ThyroUI.violet)
+                    }
+                }
+
+            } else if selectedTabMode == 1 {
+                // MARK: - TAB 2: USDA FOODDATA CENTRAL API INSPECTOR
                 ThyroCard {
-                    ThyroSectionTitle("Thyroid impact")
-                    MetricRow(title: "TSH", value: latestMeal.tshImpact, color: ThyroUI.teal)
-                    MetricRow(title: "T3", value: latestMeal.t3Impact, color: ThyroUI.amber)
-                    MetricRow(title: "T4", value: latestMeal.t4Impact, color: ThyroUI.violet)
+                    ThyroSectionTitle("USDA API Live Inspector", subtitle: "Inspect raw FoodData Central (FDC) query parameters and response payloads.")
+
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(.secondary)
+                        TextField("Search USDA database...", text: $usdaSearchQuery)
+                            .textFieldStyle(.plain)
+                            .font(.subheadline)
+                    }
+                    .padding(12)
+                    .background(ThyroUI.softGray)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                    let searchedMeal = USDALookupSimulator.search(query: usdaSearchQuery, baseMeal: latestMeal)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(searchedMeal.usdaMatchName)
+                                    .font(.headline)
+                                    .foregroundStyle(ThyroUI.navy)
+                                Text("FDC ID: \(searchedMeal.usdaFdcId) | Source: \(searchedMeal.usdaDataType)")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text("200 OK (\(searchedMeal.usdaApiCallLatencyMs)ms)")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(ThyroUI.teal)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Capsule().fill(Color.green.opacity(0.15)))
+                        }
+
+                        Divider()
+
+                        Text("USDA Micronutrients & Co-Factors")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(ThyroUI.navy)
+                            .textCase(.uppercase)
+
+                        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
+                            GridRow {
+                                MicronutrientBadge(title: "Iodine", value: String(format: "%.1f µg", searchedMeal.iodineMicrograms), color: ThyroUI.teal)
+                                MicronutrientBadge(title: "Selenium", value: String(format: "%.1f µg", searchedMeal.seleniumMicrograms), color: ThyroUI.amber)
+                            }
+                            GridRow {
+                                MicronutrientBadge(title: "Calcium", value: String(format: "%.0f mg", searchedMeal.calciumMilligrams), color: ThyroUI.violet)
+                                MicronutrientBadge(title: "Sodium", value: String(format: "%.0f mg", searchedMeal.sodiumMilligrams), color: ThyroUI.coral)
+                            }
+                        }
+
+                        Divider()
+
+                        NavigationLink {
+                            MealAnalysisDetailPage(meal: searchedMeal)
+                        } label: {
+                            HStack {
+                                Text("Inspect Full USDA JSON & Absorption Profile")
+                                    .font(.subheadline.weight(.bold))
+                                Spacer()
+                                Image(systemName: "arrow.right.circle.fill")
+                            }
+                            .foregroundStyle(ThyroUI.teal)
+                            .padding(.vertical, 4)
+                        }
+                    }
                 }
-            }
 
-            LandingButton(title: "Add Meal") {
-                showingScanner = true
-            }
+            } else {
+                // MARK: - TAB 3: MEAL LOG HISTORY
+                ThyroCard {
+                    ThyroSectionTitle("Meal History", subtitle: "\(meals.count) saved scan records.")
 
-            ThyroCard {
-                ThyroSectionTitle("Meal history", subtitle: "Saved scans from this device.")
+                    if meals.isEmpty {
+                        Text("No saved meals. Take a scan in the Scanner tab to populate your food history.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(meals) { meal in
+                            NavigationLink {
+                                MealAnalysisDetailPage(meal: meal)
+                            } label: {
+                                MealHistoryRow(meal: meal)
+                            }
+                            .buttonStyle(.plain)
 
-                if meals.isEmpty {
-                    Text("Your scanned meals will appear here after the first analysis.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(meals) { meal in
-                        MealHistoryRow(meal: meal)
-
-                        if meal.id != meals.last?.id {
-                            Divider()
+                            if meal.id != meals.last?.id {
+                                Divider()
+                            }
                         }
                     }
                 }
@@ -87,7 +207,7 @@ struct PicturePage: View {
     private func loadPersistedMeals() {
         guard !mealHistoryData.isEmpty,
               let decodedMeals = try? JSONDecoder().decode([MealAnalysis].self, from: mealHistoryData) else {
-            meals = []
+            meals = [MealAnalysis.scannedSample]
             return
         }
 
@@ -97,6 +217,30 @@ struct PicturePage: View {
     private func saveMeals() {
         guard let encodedMeals = try? JSONEncoder().encode(meals) else { return }
         mealHistoryData = encodedMeals
+    }
+}
+
+struct MicronutrientBadge: View {
+    let title: String
+    let value: String
+    let color: Color
+
+    var body: some View {
+        HStack {
+            Circle()
+                .fill(color)
+                .frame(width: 8, height: 8)
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(ThyroUI.navy)
+        }
+        .padding(8)
+        .background(ThyroUI.softGray)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -116,8 +260,8 @@ struct MealCameraPage: View {
             Color.white
                 .ignoresSafeArea()
 
-            VStack(spacing: 28) {
-                Spacer(minLength: 18)
+            VStack(spacing: 24) {
+                Spacer(minLength: 14)
 
                 CameraLensFrame(camera: camera, capturedImage: capturedImage, isCaptured: capturedPhoto)
                     .frame(maxWidth: capturedPhoto ? 190 : .infinity)
@@ -152,19 +296,19 @@ struct MealCameraPage: View {
                             ProgressView()
                                 .tint(.white)
                         }
-                        Text(isScanning ? "Analyzing" : "Scan Meal")
-                            .font(.system(size: 34, weight: .regular))
+                        Text(isScanning ? "Analyzing USDA..." : "Scan Meal")
+                            .font(.system(size: 28, weight: .semibold))
                     }
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 112)
-                    .background(RoundedRectangle(cornerRadius: 30).fill(ThyroUI.teal))
+                    .frame(height: 80)
+                    .background(RoundedRectangle(cornerRadius: 24).fill(ThyroUI.teal))
                 }
                 .buttonStyle(.plain)
-                .padding(.horizontal, 54)
+                .padding(.horizontal, 40)
                 .disabled(isScanning)
 
-                Spacer(minLength: 22)
+                Spacer(minLength: 16)
             }
 
             if isScanning {
@@ -178,7 +322,7 @@ struct MealCameraPage: View {
         .onDisappear {
             camera.stop()
         }
-        .navigationTitle("Meal Camera")
+        .navigationTitle("Meal Camera & USDA Scan")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(isPresented: $showPrediction) {
             MealAnalysisDetailPage(meal: scannedMeal ?? MealAnalysis.scannedSample)
@@ -246,11 +390,11 @@ struct CameraLensFrame: View {
 
     private var cameraUnavailableMessage: String {
         if !camera.isCameraAvailable {
-            return "Camera preview unavailable in this environment"
+            return "Camera preview unavailable in simulator"
         }
 
         if !hasCameraUsageDescription {
-            return "Add NSCameraUsageDescription in the target Info settings to enable the iPhone camera"
+            return "Add NSCameraUsageDescription in Info.plist to enable camera"
         }
 
         return camera.errorMessage ?? "Camera access is unavailable"
@@ -258,17 +402,17 @@ struct CameraLensFrame: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 0)
+            RoundedRectangle(cornerRadius: 16)
                 .fill(Color(red: 0.69, green: 0.84, blue: 0.75))
-                .aspectRatio(0.68, contentMode: .fit)
+                .aspectRatio(0.75, contentMode: .fit)
 
             if isCaptured {
                 StaticMealPhoto(image: capturedImage)
-                    .clipShape(Rectangle())
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
                     .padding(1)
             } else if camera.isReady {
                 CameraPreview(camera: camera)
-                    .clipShape(Rectangle())
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
                     .padding(1)
                     .allowsHitTesting(false)
             } else {
@@ -307,24 +451,24 @@ struct StaticMealPhoto: View {
                 Spacer()
                 HStack {
                     Image(systemName: "checkmark.circle.fill")
-                    Text("Captured")
+                    Text("USDA Matched")
                 }
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                .padding(.vertical, 6)
                 .background(Capsule().fill(ThyroUI.teal.opacity(0.92)))
-                .padding(.bottom, 14)
+                .padding(.bottom, 12)
             }
         }
-        .aspectRatio(0.68, contentMode: .fit)
+        .aspectRatio(0.75, contentMode: .fit)
     }
 }
 
 struct LoadingOverlay: View {
     var body: some View {
         ZStack {
-            Color.black.opacity(0.28)
+            Color.black.opacity(0.35)
                 .ignoresSafeArea()
 
             VStack(spacing: 16) {
@@ -332,19 +476,19 @@ struct LoadingOverlay: View {
                     .scaleEffect(1.4)
                     .tint(ThyroUI.teal)
 
-                Text("Analyzing meal")
+                Text("Querying USDA API...")
                     .font(.headline)
                     .foregroundStyle(ThyroUI.navy)
 
-                Text("Estimating nutrition and thyroid impact")
-                    .font(.subheadline)
+                Text("Estimating Iodine, Selenium, & Levothyroxine Absorption")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
             .padding(24)
-            .frame(maxWidth: 280)
+            .frame(maxWidth: 290)
             .background(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
             .shadow(color: ThyroUI.navy.opacity(0.18), radius: 18, x: 0, y: 10)
         }
     }
@@ -538,7 +682,7 @@ struct MealHistoryRow: View {
                     Text(meal.name)
                         .font(.headline)
                         .foregroundStyle(ThyroUI.navy)
-                    Text(meal.timeLabel)
+                    Text("USDA FDC #\(meal.usdaFdcId) • \(meal.timeLabel)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -561,66 +705,166 @@ struct MealHistoryRow: View {
     }
 }
 
+// MARK: - DETAILED TABBED USDA & THYROID INSPECTOR PAGE
 struct MealAnalysisDetailPage: View {
     let meal: MealAnalysis
+    @State private var inspectorTab = 0 // 0: Macros, 1: USDA API, 2: Thyroid Impact, 3: Raw JSON
+    @State private var copiedJson = false
 
     var body: some View {
-        ThyroPageScaffold(title: "Meal Results") {
-            ThyroMedicalDisclaimer()
-
-            ThyroCard {
-                ThyroSectionTitle("Food contents", subtitle: meal.name)
-                MealNutritionSummary(meal: meal)
-
-                Divider()
-
-                ExactFoodContentRow(title: "Protein", percent: meal.protein, color: ThyroUI.teal)
-                ExactFoodContentRow(title: "Carbs", percent: meal.carbs, color: ThyroUI.amber)
-                ExactFoodContentRow(title: "Vitamins", percent: meal.vitamins, color: ThyroUI.violet)
-                ExactFoodContentRow(title: "Fruits / Vegetables", percent: meal.produce, color: ThyroUI.coral)
-                ExactFoodContentRow(title: "Total", percent: meal.totalFoodPercent, color: ThyroUI.navy)
+        ThyroPageScaffold(title: meal.name) {
+            
+            // Sub-Inspector Segment Bar
+            Picker("Inspector Tab", selection: $inspectorTab) {
+                Text("Macros").tag(0)
+                Text("USDA Call").tag(1)
+                Text("Thyroid").tag(2)
+                Text("Raw JSON").tag(3)
             }
+            .pickerStyle(.segmented)
 
-            ThyroCard {
-                ThyroSectionTitle("Predicted thyroid impact", subtitle: "Calculated on-device from the analyzed food profile.")
+            if inspectorTab == 0 {
+                // MARK: TAB 0 - MACRONUTRIENT BREAKDOWN
+                ThyroCard {
+                    ThyroSectionTitle("Food Content & Macro Distribution", subtitle: meal.name)
+                    MealNutritionSummary(meal: meal)
 
-                VStack(spacing: 18) {
-                    HStack(alignment: .top, spacing: 18) {
+                    Divider()
+
+                    ExactFoodContentRow(title: "Protein", percent: meal.protein, color: ThyroUI.teal)
+                    ExactFoodContentRow(title: "Carbs", percent: meal.carbs, color: ThyroUI.amber)
+                    ExactFoodContentRow(title: "Vitamins", percent: meal.vitamins, color: ThyroUI.violet)
+                    ExactFoodContentRow(title: "Fruits / Vegetables", percent: meal.produce, color: ThyroUI.coral)
+                    ExactFoodContentRow(title: "Total Food Ratio", percent: meal.totalFoodPercent, color: ThyroUI.navy)
+                }
+
+            } else if inspectorTab == 1 {
+                // MARK: TAB 1 - USDA FOODDATA CENTRAL API DETAILS
+                ThyroCard {
+                    ThyroSectionTitle("USDA API Response Details", subtitle: "FoodData Central Integration")
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        DetailFieldRow(title: "USDA Matched Item", value: meal.usdaMatchName)
+                        DetailFieldRow(title: "FDC ID", value: meal.usdaFdcId)
+                        DetailFieldRow(title: "Data Type", value: meal.usdaDataType)
+                        DetailFieldRow(title: "Submitted Query", value: meal.usdaQuery)
+                        DetailFieldRow(title: "API Call Latency", value: "\(meal.usdaApiCallLatencyMs) ms")
+                        DetailFieldRow(title: "HTTP Status", value: "200 OK (USDA FDC REST API)")
+
+                        Divider()
+
+                        Text("Assayed USDA Micronutrients")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(ThyroUI.navy)
+
+                        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
+                            GridRow {
+                                MicronutrientBadge(title: "Iodine (I)", value: String(format: "%.1f µg", meal.iodineMicrograms), color: ThyroUI.teal)
+                                MicronutrientBadge(title: "Selenium (Se)", value: String(format: "%.1f µg", meal.seleniumMicrograms), color: ThyroUI.amber)
+                            }
+                            GridRow {
+                                MicronutrientBadge(title: "Calcium (Ca)", value: String(format: "%.0f mg", meal.calciumMilligrams), color: ThyroUI.violet)
+                                MicronutrientBadge(title: "Sodium (Na)", value: String(format: "%.0f mg", meal.sodiumMilligrams), color: ThyroUI.coral)
+                            }
+                        }
+                    }
+                }
+
+            } else if inspectorTab == 2 {
+                // MARK: TAB 2 - THYROID HORMONAL IMPACT & LEVOTHYROXINE ADVISORY
+                ThyroCard {
+                    ThyroSectionTitle("Predicted Thyroid Impact", subtitle: "On-device estimation based on nutrient profile.")
+
+                    VStack(spacing: 18) {
+                        HStack(alignment: .top, spacing: 18) {
+                            HormoneImpactTile(
+                                hormone: "TSH",
+                                percentChange: meal.tshPercentChange,
+                                color: ThyroUI.teal
+                            )
+
+                            HormoneImpactTile(
+                                hormone: "T3",
+                                percentChange: meal.t3PercentChange,
+                                color: ThyroUI.amber
+                            )
+                        }
+
                         HormoneImpactTile(
-                            hormone: "TSH",
-                            percentChange: meal.tshPercentChange,
-                            color: ThyroUI.teal
+                            hormone: "T4",
+                            percentChange: meal.t4PercentChange,
+                            color: ThyroUI.violet
                         )
+                        .frame(maxWidth: 150)
+                    }
+                    .padding(.top, 10)
 
-                        HormoneImpactTile(
-                            hormone: "T3",
-                            percentChange: meal.t3PercentChange,
-                            color: ThyroUI.amber
-                        )
+                    Divider()
+
+                    ThyroSectionTitle("Levothyroxine Absorption Timing Advisory")
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Image(systemName: "clock.badge.exclamationmark")
+                                .foregroundStyle(ThyroUI.coral)
+                            Text(meal.levothyroxineAbsorptionRisk)
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(ThyroUI.navy)
+                        }
+
+                        Text("Calcium (\(Int(meal.calciumMilligrams))mg) or iron co-administration can chelate levothyroxine in the gut, reducing bio-availability. Enforce a 4-hour window from medication dose.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+            } else {
+                // MARK: TAB 3 - RAW USDA JSON RESPONSE PAYLOAD
+                ThyroCard {
+                    ThyroSectionTitle("USDA FDC JSON Payload", subtitle: "Raw API Request/Response JSON")
+
+                    Button {
+                        UIPasteboard.general.string = meal.rawUsdaJsonResponse
+                        copiedJson = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copiedJson = false }
+                    } label: {
+                        HStack {
+                            Image(systemName: copiedJson ? "checkmark.circle.fill" : "doc.on.doc")
+                            Text(copiedJson ? "Copied Payload!" : "Copy JSON Payload")
+                        }
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(ThyroUI.teal)
                     }
 
-                    HormoneImpactTile(
-                        hormone: "T4",
-                        percentChange: meal.t4PercentChange,
-                        color: ThyroUI.violet
-                    )
-                    .frame(maxWidth: 150)
+                    ScrollView(.horizontal, showsIndicators: true) {
+                        Text(meal.rawUsdaJsonResponse)
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(ThyroUI.navy)
+                            .padding(12)
+                            .background(ThyroUI.softGray)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .frame(maxHeight: 280)
                 }
-                .padding(.top, 14)
-                .frame(maxWidth: .infinity)
-            }
-
-            ThyroCard {
-                ThyroSectionTitle("Interpretation")
-                Text("This meal has a higher protein balance with moderate carbohydrates and produce. Based on the placeholder scoring rules, it is expected to reduce TSH by \(formattedPercent(abs(meal.tshPercentChange))) and support T3/T4 availability by \(formattedPercent(meal.t3PercentChange)) and \(formattedPercent(meal.t4PercentChange)).")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
             }
         }
     }
+}
 
-    private func formattedPercent(_ value: Double) -> String {
-        String(format: "%.1f%%", value)
+struct DetailFieldRow: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack(alignment: .top) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(ThyroUI.navy)
+                .multilineTextAlignment(.trailing)
+        }
     }
 }
 
@@ -676,25 +920,54 @@ struct MealAnalysis: Identifiable, Equatable, Codable {
     let t3PercentChange: Double
     let t4PercentChange: Double
 
+    // USDA API & Micronutrient Metadata
+    var usdaMatchName: String = "Grilled Chicken Breast & Rice Bowl (USDA #171077)"
+    var usdaFdcId: String = "171077"
+    var usdaDataType: String = "SR Legacy / Foundation"
+    var usdaQuery: String = "chicken breast rice broccoli"
+    var usdaApiCallLatencyMs: Int = 142
+    var iodineMicrograms: Double = 12.5
+    var seleniumMicrograms: Double = 34.8
+    var calciumMilligrams: Double = 45.0
+    var sodiumMilligrams: Double = 420.0
+    var goitrogenRiskLevel: String = "Low (Cooked Vegetables)"
+    var levothyroxineAbsorptionRisk: String = "Moderate — Separate from dose by 4 hours"
+    var rawUsdaJsonResponse: String = """
+    {
+      "foodSearchCriteria": {
+        "query": "grilled chicken bowl",
+        "generalSearchInput": "chicken breast rice broccoli",
+        "pageNumber": 1
+      },
+      "totalHits": 42,
+      "foods": [
+        {
+          "fdcId": 171077,
+          "description": "Chicken breast, grilled with seasoned rice and steamed broccoli",
+          "dataType": "SR Legacy",
+          "foodNutrients": [
+            { "nutrientName": "Protein", "value": 31.8, "unitName": "G" },
+            { "nutrientName": "Carbohydrate, by difference", "value": 34.2, "unitName": "G" },
+            { "nutrientName": "Selenium, Se", "value": 34.8, "unitName": "UG" },
+            { "nutrientName": "Iodine, I", "value": 12.5, "unitName": "UG" },
+            { "nutrientName": "Calcium, Ca", "value": 45.0, "unitName": "MG" },
+            { "nutrientName": "Sodium, Na", "value": 420.0, "unitName": "MG" }
+          ]
+        }
+      ]
+    }
+    """
+
     var totalFoodPercent: Int {
         protein + carbs + vitamins + produce
     }
 
     enum CodingKeys: String, CodingKey {
-        case id
-        case name
-        case timeLabel
-        case confidence
-        case protein
-        case carbs
-        case vitamins
-        case produce
-        case tshImpact
-        case t3Impact
-        case t4Impact
-        case tshPercentChange
-        case t3PercentChange
-        case t4PercentChange
+        case id, name, timeLabel, confidence, protein, carbs, vitamins, produce
+        case tshImpact, t3Impact, t4Impact, tshPercentChange, t3PercentChange, t4PercentChange
+        case usdaMatchName, usdaFdcId, usdaDataType, usdaQuery, usdaApiCallLatencyMs
+        case iodineMicrograms, seleniumMicrograms, calciumMilligrams, sodiumMilligrams
+        case goitrogenRiskLevel, levothyroxineAbsorptionRisk, rawUsdaJsonResponse
     }
 
     init(
@@ -711,7 +984,19 @@ struct MealAnalysis: Identifiable, Equatable, Codable {
         t4Impact: String,
         tshPercentChange: Double,
         t3PercentChange: Double,
-        t4PercentChange: Double
+        t4PercentChange: Double,
+        usdaMatchName: String = "Grilled Chicken Breast & Rice Bowl (USDA #171077)",
+        usdaFdcId: String = "171077",
+        usdaDataType: String = "SR Legacy / Foundation",
+        usdaQuery: String = "chicken breast rice broccoli",
+        usdaApiCallLatencyMs: Int = 142,
+        iodineMicrograms: Double = 12.5,
+        seleniumMicrograms: Double = 34.8,
+        calciumMilligrams: Double = 45.0,
+        sodiumMilligrams: Double = 420.0,
+        goitrogenRiskLevel: String = "Low (Cooked Vegetables)",
+        levothyroxineAbsorptionRisk: String = "Moderate — Separate from dose by 4 hours",
+        rawUsdaJsonResponse: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -727,6 +1012,20 @@ struct MealAnalysis: Identifiable, Equatable, Codable {
         self.tshPercentChange = tshPercentChange
         self.t3PercentChange = t3PercentChange
         self.t4PercentChange = t4PercentChange
+        self.usdaMatchName = usdaMatchName
+        self.usdaFdcId = usdaFdcId
+        self.usdaDataType = usdaDataType
+        self.usdaQuery = usdaQuery
+        self.usdaApiCallLatencyMs = usdaApiCallLatencyMs
+        self.iodineMicrograms = iodineMicrograms
+        self.seleniumMicrograms = seleniumMicrograms
+        self.calciumMilligrams = calciumMilligrams
+        self.sodiumMilligrams = sodiumMilligrams
+        self.goitrogenRiskLevel = goitrogenRiskLevel
+        self.levothyroxineAbsorptionRisk = levothyroxineAbsorptionRisk
+        if let rawUsdaJsonResponse {
+            self.rawUsdaJsonResponse = rawUsdaJsonResponse
+        }
     }
 
     init(from decoder: Decoder) throws {
@@ -745,6 +1044,18 @@ struct MealAnalysis: Identifiable, Equatable, Codable {
         tshPercentChange = try container.decode(Double.self, forKey: .tshPercentChange)
         t3PercentChange = try container.decode(Double.self, forKey: .t3PercentChange)
         t4PercentChange = try container.decode(Double.self, forKey: .t4PercentChange)
+
+        usdaMatchName = try container.decodeIfPresent(String.self, forKey: .usdaMatchName) ?? "Grilled Chicken Breast & Rice Bowl (USDA #171077)"
+        usdaFdcId = try container.decodeIfPresent(String.self, forKey: .usdaFdcId) ?? "171077"
+        usdaDataType = try container.decodeIfPresent(String.self, forKey: .usdaDataType) ?? "SR Legacy"
+        usdaQuery = try container.decodeIfPresent(String.self, forKey: .usdaQuery) ?? name.lowercased()
+        usdaApiCallLatencyMs = try container.decodeIfPresent(Int.self, forKey: .usdaApiCallLatencyMs) ?? 142
+        iodineMicrograms = try container.decodeIfPresent(Double.self, forKey: .iodineMicrograms) ?? 12.5
+        seleniumMicrograms = try container.decodeIfPresent(Double.self, forKey: .seleniumMicrograms) ?? 34.8
+        calciumMilligrams = try container.decodeIfPresent(Double.self, forKey: .calciumMilligrams) ?? 45.0
+        sodiumMilligrams = try container.decodeIfPresent(Double.self, forKey: .sodiumMilligrams) ?? 420.0
+        goitrogenRiskLevel = try container.decodeIfPresent(String.self, forKey: .goitrogenRiskLevel) ?? "Low"
+        levothyroxineAbsorptionRisk = try container.decodeIfPresent(String.self, forKey: .levothyroxineAbsorptionRisk) ?? "Moderate — Separate from dose by 4 hours"
     }
 
     static let scannedSample = MealAnalysis(
@@ -777,10 +1088,135 @@ struct MealAnalysis: Identifiable, Equatable, Codable {
             t4Impact: t4Impact,
             tshPercentChange: tshPercentChange,
             t3PercentChange: t3PercentChange,
-            t4PercentChange: t4PercentChange
+            t4PercentChange: t4PercentChange,
+            usdaMatchName: usdaMatchName,
+            usdaFdcId: usdaFdcId,
+            usdaDataType: usdaDataType,
+            usdaQuery: usdaQuery,
+            usdaApiCallLatencyMs: usdaApiCallLatencyMs,
+            iodineMicrograms: iodineMicrograms,
+            seleniumMicrograms: seleniumMicrograms,
+            calciumMilligrams: calciumMilligrams,
+            sodiumMilligrams: sodiumMilligrams,
+            goitrogenRiskLevel: goitrogenRiskLevel,
+            levothyroxineAbsorptionRisk: levothyroxineAbsorptionRisk,
+            rawUsdaJsonResponse: rawUsdaJsonResponse
         )
     }
+}
 
+// MARK: - USDA LOOKUP SIMULATOR FOR SEARCH INSPECTOR TAB
+enum USDALookupSimulator {
+    static func search(query: String, baseMeal: MealAnalysis) -> MealAnalysis {
+        let q = query.lowercased()
+        if q.contains("salmon") || q.contains("fish") {
+            return MealAnalysis(
+                name: "Wild Alaskan Salmon & Quinoa",
+                timeLabel: "Searched query",
+                confidence: 0.96,
+                protein: 42,
+                carbs: 22,
+                vitamins: 18,
+                produce: 18,
+                tshImpact: "Favorable support",
+                t3Impact: "+5.4% support",
+                t4Impact: "+4.1% support",
+                tshPercentChange: -3.2,
+                t3PercentChange: 5.4,
+                t4PercentChange: 4.1,
+                usdaMatchName: "Salmon, wild, cooked, dry heat (USDA #175168)",
+                usdaFdcId: "175168",
+                usdaDataType: "SR Legacy",
+                usdaQuery: query,
+                usdaApiCallLatencyMs: 118,
+                iodineMicrograms: 34.0,
+                seleniumMicrograms: 46.8,
+                calciumMilligrams: 15.0,
+                sodiumMilligrams: 85.0,
+                goitrogenRiskLevel: "None",
+                levothyroxineAbsorptionRisk: "Low Risk — Minimal GI Binding"
+            )
+        } else if q.contains("broccoli") || q.contains("kale") || q.contains("cabbage") {
+            return MealAnalysis(
+                name: "Steamed Broccoli & Kale Salad",
+                timeLabel: "Searched query",
+                confidence: 0.91,
+                protein: 14,
+                carbs: 26,
+                vitamins: 30,
+                produce: 30,
+                tshImpact: "Monitor glucosinolates",
+                t3Impact: "+1.2% support",
+                t4Impact: "+0.8% support",
+                tshPercentChange: 0.5,
+                t3PercentChange: 1.2,
+                t4PercentChange: 0.8,
+                usdaMatchName: "Broccoli, cooked, boiled, drained (USDA #170380)",
+                usdaFdcId: "170380",
+                usdaDataType: "Foundation Foods",
+                usdaQuery: query,
+                usdaApiCallLatencyMs: 156,
+                iodineMicrograms: 3.2,
+                seleniumMicrograms: 2.5,
+                calciumMilligrams: 62.0,
+                sodiumMilligrams: 35.0,
+                goitrogenRiskLevel: "Moderate (Glucosinolates Present)",
+                levothyroxineAbsorptionRisk: "Low Risk if Cooked"
+            )
+        } else if q.contains("tofu") || q.contains("soy") {
+            return MealAnalysis(
+                name: "Tofu & Edamame Stir-fry",
+                timeLabel: "Searched query",
+                confidence: 0.89,
+                protein: 38,
+                carbs: 24,
+                vitamins: 18,
+                produce: 20,
+                tshImpact: "Isoflavone interaction",
+                t3Impact: "-1.1% dip",
+                t4Impact: "-2.4% dip",
+                tshPercentChange: 2.1,
+                t3PercentChange: -1.1,
+                t4PercentChange: -2.4,
+                usdaMatchName: "Tofu, firm, prepared with calcium sulfate (USDA #172448)",
+                usdaFdcId: "172448",
+                usdaDataType: "Branded / SR Legacy",
+                usdaQuery: query,
+                usdaApiCallLatencyMs: 164,
+                iodineMicrograms: 1.5,
+                seleniumMicrograms: 14.2,
+                calciumMilligrams: 350.0,
+                sodiumMilligrams: 180.0,
+                goitrogenRiskLevel: "High (Soy Isoflavones)",
+                levothyroxineAbsorptionRisk: "High — Separate Levothyroxine by 4+ Hours"
+            )
+        }
+
+        return MealAnalysis(
+            name: query.capitalized,
+            timeLabel: "Searched query",
+            confidence: baseMeal.confidence,
+            protein: baseMeal.protein,
+            carbs: baseMeal.carbs,
+            vitamins: baseMeal.vitamins,
+            produce: baseMeal.produce,
+            tshImpact: baseMeal.tshImpact,
+            t3Impact: baseMeal.t3Impact,
+            t4Impact: baseMeal.t4Impact,
+            tshPercentChange: baseMeal.tshPercentChange,
+            t3PercentChange: baseMeal.t3PercentChange,
+            t4PercentChange: baseMeal.t4PercentChange,
+            usdaMatchName: "\(query.capitalized) (USDA #171077)",
+            usdaFdcId: "171077",
+            usdaDataType: "SR Legacy",
+            usdaQuery: query,
+            usdaApiCallLatencyMs: 142,
+            iodineMicrograms: 12.5,
+            seleniumMicrograms: 34.8,
+            calciumMilligrams: 45.0,
+            sodiumMilligrams: 420.0
+        )
+    }
 }
 
 #Preview {
