@@ -2,12 +2,12 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "THYROCARE DASHBOARD",
-  description: "Advanced Endocrinology & Thyroid Intelligence Platform"
+  title: "ThyroCare Dashboard",
+  description: "Diet, thyroid health, and connected family care.",
 };
 
 export default function RootLayout({
-  children
+  children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {

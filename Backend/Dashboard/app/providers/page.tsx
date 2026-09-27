@@ -1,14 +1,17 @@
-"use client";
-
-import ClinicalAppShell from "@/components/ClinicalAppShell";
+import FamilyAppShell from "@/components/FamilyAppShell";
 import EndocrinologistSearch from "@/components/EndocrinologistSearch";
-
+import { PageHeading } from "@/components/DashboardUI";
 export default function ProviderSearchPage() {
   return (
-    <ClinicalAppShell>
-      <div className="max-w-[1600px] mx-auto p-4 sm:p-6 space-y-6">
+    <FamilyAppShell>
+      <div className="tc-page">
+        <PageHeading
+          eyebrow="BUILD YOUR CARE TEAM"
+          title="Find care, closer to you."
+          description="Take the next step toward a conversation about your thyroid health and diet."
+        />
         <EndocrinologistSearch />
       </div>
-    </ClinicalAppShell>
+    </FamilyAppShell>
   );
 }

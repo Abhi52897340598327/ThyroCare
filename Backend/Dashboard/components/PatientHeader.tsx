@@ -50,16 +50,16 @@ export default function PatientHeader({ patient }: { patient: PatientProfile }) 
   };
 
   return (
-    <div className="bg-white border-b border-slate-200 px-6 py-3 shadow-xs sticky top-14 z-40">
+    <div className="bg-white border-b border-slate-200 px-6 py-3 shadow-xs ">
       <div className="max-w-[1920px] mx-auto flex flex-wrap items-center justify-between gap-4">
         
         {/* Patient Identity */}
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-full bg-slate-900 text-teal-400 font-bold flex items-center justify-center text-sm shadow-xs border border-slate-700">
             {patient.name.split(" ").map(n => n[0]).join("")}
           </div>
           <div>
-            <div className="flex items-center space-x-3">
+            <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-base font-bold text-slate-900 uppercase tracking-tight">{patient.name}</h1>
               <span className="text-xs text-slate-500 font-medium">{patient.age} yrs | {patient.sex}</span>
               {getStatusBadge(patient.status)}
@@ -71,7 +71,7 @@ export default function PatientHeader({ patient }: { patient: PatientProfile }) 
         </div>
 
         {/* Clinical Metrics Bar */}
-        <div className="flex items-center space-x-6 text-xs border-x border-slate-200 px-6 py-1">
+        <div className="flex flex-wrap items-center gap-4 text-xs border-slate-200 py-1">
           <div>
             <span className="text-slate-500 block uppercase font-medium text-[10px]">Latest TSH</span>
             <span className="font-extrabold text-sm text-slate-900">
@@ -106,7 +106,7 @@ export default function PatientHeader({ patient }: { patient: PatientProfile }) 
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center space-x-2 relative">
+        <div className="flex flex-wrap items-center gap-2 relative">
           <button 
             onClick={() => handleAction(`Report generation initiated for ${patient.name}`)}
             className="inline-flex items-center space-x-1.5 bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold px-3 py-1.5 rounded shadow-xs transition-colors"

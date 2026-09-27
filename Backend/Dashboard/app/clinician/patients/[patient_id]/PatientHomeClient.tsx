@@ -29,9 +29,6 @@ export default function PatientHomeClient({
             <h1 className="text-lg font-bold text-slate-900 uppercase tracking-tight">Patient Overview Home</h1>
             <p className="text-xs text-slate-500">Central thyroid summary and clinical review status for {patient.name}.</p>
           </div>
-          <div className="text-xs text-slate-400 font-mono">
-            URL Context: /clinician/patients/{patient.id}
-          </div>
         </div>
 
         {/* Section 1: Latest Thyroid Status */}

@@ -18,11 +18,11 @@ export default function PatientWorkspaceLayout({
     <ClinicalAppShell>
       <div className="flex flex-col min-h-screen bg-slate-100 font-sans text-slate-900">
         <PatientHeader patient={patient} />
-        <div className="flex flex-1 max-w-[1920px] w-full mx-auto">
+        <div className="flex flex-col lg:flex-row flex-1 max-w-[1920px] w-full mx-auto min-w-0">
           <PatientSidebar patientId={patient.id} />
-          <main className="flex-1 p-6 overflow-y-auto min-w-0">
+          <div className="flex-1 p-3 sm:p-6 overflow-x-auto min-w-0">
             {children}
-          </main>
+          </div>
         </div>
       </div>
     </ClinicalAppShell>
