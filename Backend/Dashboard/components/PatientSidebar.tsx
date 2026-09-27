@@ -43,13 +43,13 @@ export default function PatientSidebar({ patientId }: { patientId: string }) {
   ];
 
   return (
-    <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col flex-shrink-0 min-h-[calc(100vh-7rem)] text-slate-300">
-      <div className="p-3 border-b border-slate-800/80">
+    <aside className="w-full lg:w-64 bg-slate-900 border-r border-slate-800 flex flex-col flex-shrink-0 lg:min-h-[calc(100vh-7rem)] text-slate-300">
+      <div className="hidden lg:block p-3 border-b border-slate-800/80">
         <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 block px-2">Patient Navigation</span>
         <span className="text-xs font-bold text-teal-400 px-2 truncate block">ID: {patientId.toUpperCase()}</span>
       </div>
 
-      <nav className="flex-1 py-2 px-2 space-y-0.5 overflow-y-auto">
+      <nav className="flex lg:block flex-1 py-2 px-2 gap-2 lg:space-y-0.5 overflow-x-auto">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = item.exact 
@@ -60,7 +60,7 @@ export default function PatientSidebar({ patientId }: { patientId: string }) {
             <Link
               key={item.label}
               href={item.href}
-              className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+              className={`flex shrink-0 items-center justify-between px-3 py-3 lg:py-2 rounded-md text-xs font-medium transition-colors ${
                 isActive
                   ? "bg-teal-600 text-white font-semibold shadow-xs"
                   : "text-slate-300 hover:bg-slate-800 hover:text-white"
@@ -78,9 +78,9 @@ export default function PatientSidebar({ patientId }: { patientId: string }) {
         })}
       </nav>
 
-      <div className="p-3 border-t border-slate-800 bg-slate-950/60 text-[11px] text-slate-400">
+      <div className="hidden lg:block p-3 border-t border-slate-800 bg-slate-950/60 text-[11px] text-slate-400">
         <span className="block font-semibold text-slate-300">Clinician EHR Context</span>
-        <span>Authorized Access Active</span>
+        <span>Sample patient record</span>
       </div>
     </aside>
   );

@@ -1,133 +1,314 @@
 "use client";
-
 import { useState } from "react";
 import Link from "next/link";
-import FamilyAppShell from "@/components/FamilyAppShell";
-import { MOCK_PATIENTS } from "@/lib/demoData";
-import { 
-  Users, 
-  ChevronRight, 
-  Activity, 
-  Calendar, 
-  ShieldCheck, 
-  TrendingUp, 
-  AlertCircle,
+import {
+  Activity,
+  ArrowRight,
+  CalendarDays,
+  ChevronRight,
   FileText,
-  Clock
+  Heart,
+  Stethoscope,
+  Utensils,
 } from "lucide-react";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import FamilyAppShell from "@/components/FamilyAppShell";
+import {
+  MetricCard,
+  PageHeading,
+  Panel,
+  StatusBadge,
+} from "@/components/DashboardUI";
+import { MOCK_PATIENTS } from "@/lib/demoData";
 
 export default function FamilyDashboard() {
-  const familyMembers = MOCK_PATIENTS;
-
+  const [memberId, setMemberId] = useState(MOCK_PATIENTS[0].id);
+  const [period, setPeriod] = useState<"recent" | "all">("recent");
+  const member =
+    MOCK_PATIENTS.find((p) => p.id === memberId) ?? MOCK_PATIENTS[0];
+  const labs = [...member.labs].sort(
+    (a, b) => Date.parse(a.date) - Date.parse(b.date),
+  );
+  const chart = (period === "recent" ? labs.slice(-4) : labs).map((lab) => ({
+    ...lab,
+    label: new Date(lab.date).toLocaleDateString("en-US", {
+      month: "short",
+      year: "2-digit",
+      timeZone: "UTC",
+    }),
+  }));
+  const notes = member.notes.filter((note) => note.type === "patient-visible");
   return (
     <FamilyAppShell>
-      <div className="space-y-6">
-        
-        {/* Header Summary */}
-        <div className="bg-white rounded-lg border border-slate-200 p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center space-x-2">
-              <span className="bg-teal-100 text-teal-800 text-[11px] font-extrabold uppercase px-2.5 py-0.5 rounded border border-teal-200">
-                Caregiver Access Level 1
-              </span>
-              <span className="text-xs text-slate-500 font-mono">HIPAA Compliant Sharing</span>
-            </div>
-            <h1 className="text-xl font-extrabold text-slate-900 mt-1 uppercase tracking-tight flex items-center space-x-2">
-              <Users className="w-5 h-5 text-teal-700" />
-              <span>LINKED FAMILY HEALTH PORTAL</span>
-            </h1>
-            <p className="text-xs text-slate-600 mt-0.5">
-              Authorized real-time summary of linked family members, latest thyroid assays, trends, and upcoming clinical consults.
-            </p>
-          </div>
-
-          <div className="flex items-center space-x-3">
-            <Link
-              href="/family/reports"
-              className="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs px-4 py-2.5 rounded-lg flex items-center space-x-2 shadow-xs transition-colors"
-            >
-              <FileText className="w-4 h-4 text-teal-400" />
-              <span>View Family Reports</span>
+      <div className="tc-page">
+        <PageHeading
+          eyebrow="YOUR FAMILY, IN FOCUS"
+          title="A little clarity. A healthier everyday."
+          description="Keep your diet, thyroid health, and care team in one place."
+          action={
+            <Link className="tc-button primary" href="/family/reports">
+              <FileText size={17} />
+              View reports
             </Link>
-          </div>
-        </div>
-
-        {/* Linked Family Members Cards Grid */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center space-x-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              <span>Authorized Linked Family Members ({familyMembers.length})</span>
-            </h2>
-            <span className="text-xs text-slate-500">Updated today at 08:30 AM</span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {familyMembers.map((member) => (
-              <div
-                key={member.id}
-                className="bg-white rounded-lg border border-slate-200 shadow-xs hover:shadow-md transition-shadow p-5 flex flex-col justify-between space-y-4"
+          }
+        />
+        <div className="tc-member-bar">
+          <div className="tc-member-identity">
+            <span className="tc-avatar large">
+              {member.name
+                .split(" ")
+                .map((n) => n[0])
+                .join("")}
+            </span>
+            <div>
+              <label htmlFor="family-member">Viewing health for</label>
+              <select
+                id="family-member"
+                value={memberId}
+                onChange={(e) => setMemberId(e.target.value)}
               >
-                <div>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <span className="text-[10px] font-bold uppercase text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
-                        {member.relationship || "Family Member"}
-                      </span>
-                      <h3 className="text-base font-extrabold text-slate-900 mt-1">{member.name}</h3>
-                      <p className="text-xs text-slate-500 font-mono">
-                        Age {member.age} • {member.sex} • {member.condition}
-                      </p>
-                    </div>
-
-                    <div className="w-10 h-10 rounded-full bg-slate-900 text-teal-400 font-extrabold text-xs flex items-center justify-center border border-slate-800 shrink-0">
-                      {member.name.split(" ").map(n => n[0]).join("")}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-slate-200">
-                    <div className="p-3 bg-slate-50 rounded border border-slate-200">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase block">Latest TSH</span>
-                      <div className="flex items-baseline space-x-1 mt-0.5">
-                        <span className="text-lg font-black text-slate-900">{member.latestTSH}</span>
-                        <span className="text-[10px] text-slate-500 font-mono">mIU/L</span>
-                      </div>
-                      <span className="text-[10px] font-semibold text-teal-700 block mt-0.5">
-                        {member.trend}
-                      </span>
-                    </div>
-
-                    <div className="p-3 bg-slate-50 rounded border border-slate-200">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase block">Last Test</span>
-                      <span className="text-xs font-bold text-slate-800 mt-1 block">{member.lastLabDate}</span>
-                      <span className="text-[10px] text-slate-400 block mt-0.5">Quest Diagnostics</span>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 p-3 bg-teal-50/60 rounded border border-teal-200/80 text-xs space-y-1">
-                    <div className="flex justify-between items-center text-teal-900 font-bold">
-                      <span className="flex items-center space-x-1">
-                        <Clock className="w-3.5 h-3.5 text-teal-700" />
-                        <span>Next Appointment</span>
-                      </span>
-                      <span>{member.nextVisit}</span>
-                    </div>
-                    <p className="text-[11px] text-slate-600 truncate">Endocrinology Specialist Follow-up</p>
-                  </div>
-                </div>
-
-                <Link
-                  href={`/family/members/${member.id}`}
-                  className="w-full bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold py-2.5 rounded-lg flex items-center justify-center space-x-1.5 transition-colors"
-                >
-                  <span>View Member Health Profile</span>
-                  <ChevronRight className="w-4 h-4 text-teal-400" />
-                </Link>
-              </div>
-            ))}
+                {MOCK_PATIENTS.map((p) => (
+                  <option value={p.id} key={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <span className="tc-member-condition">
+              {member.relationship ?? "Family member"} · {member.condition}
+            </span>
           </div>
+          <Link href={`/family/members/${member.id}`} className="tc-text-link">
+            Full health profile
+            <ArrowRight size={16} />
+          </Link>
         </div>
-
+        <div className="tc-metrics">
+          <MetricCard
+            label="Latest TSH"
+            value={member.latestTSH}
+            unit="mIU/L"
+            detail={`Last lab · ${member.lastLabDate}`}
+            icon={Activity}
+            tone="teal"
+          />
+          <MetricCard
+            label="Free T4"
+            value={member.latestFT4}
+            unit="ng/dL"
+            detail="From your latest lab result"
+            icon={Heart}
+            tone="violet"
+          />
+          <MetricCard
+            label="Meals in your record"
+            value={member.nutritionSummary.detailedLogs.length}
+            unit="logged"
+            detail={`Over the last ${member.nutritionSummary.periodDays} days`}
+            icon={Utensils}
+            tone="amber"
+          />
+          <MetricCard
+            label="Next appointment"
+            value={member.nextVisit.replace(", 2026", "")}
+            detail="See appointment details"
+            icon={CalendarDays}
+            tone="navy"
+          />
+        </div>
+        <div className="tc-main-grid">
+          <Panel
+            title="Your thyroid, over time"
+            subtitle="TSH lab results · mIU/L"
+            action={
+              <div className="tc-segment" aria-label="Chart period">
+                <button
+                  aria-pressed={period === "recent"}
+                  onClick={() => setPeriod("recent")}
+                >
+                  Recent
+                </button>
+                <button
+                  aria-pressed={period === "all"}
+                  onClick={() => setPeriod("all")}
+                >
+                  All results
+                </button>
+              </div>
+            }
+          >
+            <div className="tc-chart-summary">
+              <strong>
+                {member.latestTSH}
+                <span>mIU/L</span>
+              </strong>
+              <StatusBadge status={member.status} />
+            </div>
+            <div
+              className="tc-chart"
+              role="img"
+              aria-label={`TSH results for ${member.name}: ${chart.map((lab) => `${lab.date}: ${lab.tsh} mIU/L`).join("; ")}`}
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                  data={chart}
+                  margin={{ top: 16, right: 20, bottom: 0, left: -24 }}
+                >
+                  <CartesianGrid
+                    vertical={false}
+                    stroke="#E6EDEE"
+                    strokeDasharray="4 4"
+                  />
+                  <XAxis
+                    dataKey="label"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: "#607580", fontSize: 12 }}
+                    dy={12}
+                  />
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: "#607580", fontSize: 12 }}
+                    domain={[0, "auto"]}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: 12,
+                      border: "1px solid #DCE6E7",
+                      fontSize: 13,
+                    }}
+                    labelFormatter={(_, payload) =>
+                      payload?.[0]?.payload?.date ?? "Lab result"
+                    }
+                    formatter={(value: number) => [`${value} mIU/L`, "TSH"]}
+                  />
+                  <Line
+                    type="linear"
+                    dataKey="tsh"
+                    stroke="#0D9494"
+                    strokeWidth={3}
+                    dot={{ r: 4, fill: "#FFFFFF", strokeWidth: 2 }}
+                    activeDot={{ r: 6 }}
+                    isAnimationActive={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="tc-panel-footnote">
+              Each point is a recorded lab result. Your care team can help
+              interpret changes.
+            </p>
+          </Panel>
+          <section className="tc-care-card">
+            <div className="tc-care-icon">
+              <Stethoscope size={23} />
+            </div>
+            <p className="tc-eyebrow">BETTER, TOGETHER</p>
+            <h2>Your next conversation starts here.</h2>
+            <p>
+              Bring your food log and recent results to your next visit. Make
+              room for questions that matter to you.
+            </p>
+            <Link href="/family/appointments" className="tc-button light">
+              Plan your next visit
+              <ArrowRight size={17} />
+            </Link>
+            <div className="tc-care-divider" />
+            <span className="tc-care-caption">LOOKING FOR A SPECIALIST?</span>
+            <Link href="/providers" className="tc-care-link">
+              Find an endocrinologist
+              <ArrowRight size={17} />
+            </Link>
+          </section>
+        </div>
+        <div className="tc-main-grid">
+          <Panel
+            title="Food & everyday habits"
+            subtitle={`Recent entries for ${member.name.split(" ")[0]}`}
+            action={
+              <Link
+                className="tc-text-link"
+                href={`/family/members/${member.id}`}
+              >
+                View record
+                <ChevronRight size={15} />
+              </Link>
+            }
+          >
+            <div className="tc-food-list">
+              {member.nutritionSummary.detailedLogs.length ? (
+                member.nutritionSummary.detailedLogs
+                  .slice(0, 3)
+                  .map((food, i) => (
+                    <div className="tc-food-row" key={food.id}>
+                      <span className={`tc-food-number tone-${i}`}>
+                        0{i + 1}
+                      </span>
+                      <div>
+                        <h3>{food.food}</h3>
+                        <p>{food.constituent}</p>
+                      </div>
+                      <time>{food.date}</time>
+                    </div>
+                  ))
+              ) : (
+                <p className="tc-empty">
+                  No meals recorded yet. Add a meal in the ThyroCare mobile app.
+                </p>
+              )}
+            </div>
+            <div className="tc-gentle-note">
+              <Utensils size={17} />
+              <span>
+                Record meals in the mobile app to prepare for a conversation
+                about your diet.
+              </span>
+            </div>
+          </Panel>
+          <Panel title="From your care team" subtitle="Notes shared with you">
+            <div className="tc-note-list">
+              {notes.length ? (
+                notes.slice(0, 2).map((note) => (
+                  <article className="tc-clinical-note" key={note.id}>
+                    <div>
+                      <span className="tc-avatar small">
+                        {note.author
+                          .split(" ")
+                          .filter((n) => n !== "Dr.")
+                          .map((n) => n[0])
+                          .slice(0, 2)
+                          .join("")}
+                      </span>
+                      <div>
+                        <strong>{note.author}</strong>
+                        <time>{note.date}</time>
+                      </div>
+                    </div>
+                    <p>{note.text}</p>
+                  </article>
+                ))
+              ) : (
+                <div className="tc-empty">
+                  <Stethoscope size={26} />
+                  <h3>A space for your care team.</h3>
+                  <p>
+                    Patient-visible notes will appear here when they are
+                    available in your record.
+                  </p>
+                </div>
+              )}
+            </div>
+          </Panel>
+        </div>
       </div>
     </FamilyAppShell>
   );
