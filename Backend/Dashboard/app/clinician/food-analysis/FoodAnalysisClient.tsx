@@ -208,9 +208,38 @@ const PRESET_MEALS: FoodSample[] = [
   }
 ];
 
+const EMPTY_MEAL: FoodSample = {
+  id: "awaiting-live-analysis",
+  name: "Awaiting live food analysis",
+  image: "",
+  confidence: 0,
+  protein: 0,
+  carbs: 0,
+  vitamins: 0,
+  produce: 0,
+  usdaMatchName: "No live USDA result yet",
+  usdaFdcId: "Pending",
+  usdaDataType: "Pending",
+  usdaQuery: "Pending",
+  usdaApiCallLatencyMs: 0,
+  iodineMicrograms: 0,
+  seleniumMicrograms: 0,
+  calciumMilligrams: 0,
+  sodiumMilligrams: 0,
+  ironMilligrams: 0,
+  tshPercentChange: 0,
+  t3PercentChange: 0,
+  t4PercentChange: 0,
+  tshImpact: "Pending",
+  t3Impact: "Pending",
+  t4Impact: "Pending",
+  levothyroxineAbsorptionRisk: "Pending live nutrient analysis",
+  rawUsdaJsonResponse: "{}"
+};
+
 export default function FoodAnalysisClient() {
-  const [meals, setMeals] = useState<FoodSample[]>(PRESET_MEALS);
-  const [selectedMeal, setSelectedMeal] = useState<FoodSample>(PRESET_MEALS[0]);
+  const [meals, setMeals] = useState<FoodSample[]>([]);
+  const [selectedMeal, setSelectedMeal] = useState<FoodSample>(EMPTY_MEAL);
   const [activeTab, setActiveTab] = useState<"overview" | "usda" | "hormones" | "json">("overview");
   const [copied, setCopied] = useState(false);
   const [isSimulatingScan, setIsSimulatingScan] = useState(false);
@@ -227,7 +256,7 @@ export default function FoodAnalysisClient() {
           return {
             id: `live-${index}-${analysis.timeLabel}`,
             name: analysis.name,
-            image: imagePath ?? PRESET_MEALS[0].image,
+            image: imagePath ?? "",
             confidence: analysis.confidence,
             protein: analysis.protein,
             carbs: analysis.carbs,
@@ -321,6 +350,12 @@ export default function FoodAnalysisClient() {
 
         {/* Meal Preset Selection Strip */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {meals.length === 0 && (
+            <div className="md:col-span-3 rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center">
+              <p className="text-sm font-bold text-thyro-navy">No live meal analysis is available yet.</p>
+              <p className="mt-1 text-xs text-slate-500">Scan a food photo in the mobile app to populate this dashboard.</p>
+            </div>
+          )}
           {meals.map((meal) => (
             <div
               key={meal.id}
@@ -363,7 +398,13 @@ export default function FoodAnalysisClient() {
               </div>
 
               <div className="relative rounded-lg overflow-hidden border border-slate-200 aspect-video bg-thyro-navy">
-                <img src={selectedMeal.image} alt={selectedMeal.name} className="w-full h-full object-cover" />
+                {selectedMeal.image ? (
+                  <img src={selectedMeal.image} alt={selectedMeal.name} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-xs font-bold text-slate-300">
+                    Live meal image pending
+                  </div>
+                )}
                 <div className="absolute bottom-2 left-2 right-2 bg-thyro-navy/90 backdrop-blur-xs p-2.5 rounded text-white text-xs flex items-center justify-between border border-slate-700">
                   <div className="truncate pr-2">
                     <p className="font-bold text-slate-100 truncate">{selectedMeal.name}</p>
