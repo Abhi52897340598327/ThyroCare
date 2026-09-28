@@ -959,6 +959,17 @@ public func configure(_ app: Application) throws {
         servePublicHTML(req: req, path: "family.html")
     }
 
+    app.get("family", "**") { req -> Response in
+        let uriPath = req.url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let htmlPath = uriPath + ".html"
+        let publicHTML = app.directory.publicDirectory + htmlPath
+        if FileManager.default.fileExists(atPath: publicHTML),
+           let data = FileManager.default.contents(atPath: publicHTML) {
+            return Response(status: .ok, headers: ["content-type": "text/html; charset=utf-8"], body: .init(data: data))
+        }
+        return servePublicHTML(req: req, path: "family.html")
+    }
+
     app.get("patient") { req -> Response in
         servePublicHTML(req: req, path: "patient.html")
     }
