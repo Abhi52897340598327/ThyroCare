@@ -376,7 +376,8 @@ enum DashboardRenderer {
             return """
             <li>
                 <strong>\(escape(detail.detectedFood))</strong>
-                <span>\(format(detail.estimatedGrams))g estimate · USDA: \(escape(detail.usdaDescription)) · query: \(escape(detail.usdaSearchQuery))</span>
+                <span>\(format(detail.estimatedGrams))g estimate · USDA: \(escape(detail.usdaDescription))</span>
+                <span>FDC ID: \(escape(detail.usdaFdcId)) · Data type: \(escape(detail.usdaDataType)) · query: \(escape(detail.usdaSearchQuery))</span>
                 <span>\(escape(nutrients))</span>
             </li>
             """

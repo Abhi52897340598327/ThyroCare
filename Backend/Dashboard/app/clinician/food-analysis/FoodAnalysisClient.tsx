@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ClinicalTopNav from "@/components/ClinicalTopNav";
 import { 
   Camera, 
@@ -43,6 +43,42 @@ interface FoodSample {
   t4Impact: string;
   levothyroxineAbsorptionRisk: string;
   rawUsdaJsonResponse: string;
+}
+
+interface LiveMealAnalysis {
+  name: string;
+  timeLabel: string;
+  confidence: number;
+  protein: number;
+  carbs: number;
+  vitamins: number;
+  produce: number;
+  usdaMatchName?: string;
+  usdaFdcId?: string;
+  usdaDataType?: string;
+  usdaQuery?: string;
+  usdaApiCallLatencyMs?: number;
+  iodineMicrograms?: number;
+  seleniumMicrograms?: number;
+  calciumMilligrams?: number;
+  sodiumMilligrams?: number;
+  tshPercentChange: number;
+  t3PercentChange: number;
+  t4PercentChange: number;
+  tshImpact: string;
+  t3Impact: string;
+  t4Impact: string;
+  nutritionDetails?: Array<{
+    usdaDescription: string;
+    usdaSearchQuery: string;
+    usdaFdcId?: string;
+    usdaDataType?: string;
+  }>;
+}
+
+interface StoredLiveMealAnalysis {
+  analysis: LiveMealAnalysis;
+  imagePath?: string;
 }
 
 const PRESET_MEALS: FoodSample[] = [
@@ -173,10 +209,62 @@ const PRESET_MEALS: FoodSample[] = [
 ];
 
 export default function FoodAnalysisClient() {
+  const [meals, setMeals] = useState<FoodSample[]>(PRESET_MEALS);
   const [selectedMeal, setSelectedMeal] = useState<FoodSample>(PRESET_MEALS[0]);
   const [activeTab, setActiveTab] = useState<"overview" | "usda" | "hormones" | "json">("overview");
   const [copied, setCopied] = useState(false);
   const [isSimulatingScan, setIsSimulatingScan] = useState(false);
+
+  useEffect(() => {
+    const loadLiveMeals = async () => {
+      try {
+        const response = await fetch("/analyses", { cache: "no-store" });
+        if (!response.ok) return;
+
+        const records = (await response.json()) as StoredLiveMealAnalysis[];
+        const liveMeals = records.map(({ analysis, imagePath }, index) => {
+          const firstMatch = analysis.nutritionDetails?.[0];
+          return {
+            id: `live-${index}-${analysis.timeLabel}`,
+            name: analysis.name,
+            image: imagePath ?? PRESET_MEALS[0].image,
+            confidence: analysis.confidence,
+            protein: analysis.protein,
+            carbs: analysis.carbs,
+            vitamins: analysis.vitamins,
+            produce: analysis.produce,
+            usdaMatchName: analysis.usdaMatchName ?? firstMatch?.usdaDescription ?? "USDA match unavailable",
+            usdaFdcId: analysis.usdaFdcId ?? firstMatch?.usdaFdcId ?? "Unavailable",
+            usdaDataType: analysis.usdaDataType ?? firstMatch?.usdaDataType ?? "Unavailable",
+            usdaQuery: analysis.usdaQuery ?? firstMatch?.usdaSearchQuery ?? "Unavailable",
+            usdaApiCallLatencyMs: analysis.usdaApiCallLatencyMs ?? 0,
+            iodineMicrograms: analysis.iodineMicrograms ?? 0,
+            seleniumMicrograms: analysis.seleniumMicrograms ?? 0,
+            calciumMilligrams: analysis.calciumMilligrams ?? 0,
+            sodiumMilligrams: analysis.sodiumMilligrams ?? 0,
+            ironMilligrams: 0,
+            tshPercentChange: analysis.tshPercentChange,
+            t3PercentChange: analysis.t3PercentChange,
+            t4PercentChange: analysis.t4PercentChange,
+            tshImpact: analysis.tshImpact,
+            t3Impact: analysis.t3Impact,
+            t4Impact: analysis.t4Impact,
+            levothyroxineAbsorptionRisk: "Review nutrient timing with the patient",
+            rawUsdaJsonResponse: JSON.stringify(analysis, null, 2)
+          };
+        });
+
+        if (liveMeals.length > 0) {
+          setMeals(liveMeals);
+          setSelectedMeal(liveMeals[0]);
+        }
+      } catch {
+        // Keep presets available if the live API is temporarily unavailable.
+      }
+    };
+
+    loadLiveMeals();
+  }, []);
 
   const handleCopyJson = () => {
     navigator.clipboard.writeText(selectedMeal.rawUsdaJsonResponse);
@@ -233,7 +321,7 @@ export default function FoodAnalysisClient() {
 
         {/* Meal Preset Selection Strip */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {PRESET_MEALS.map((meal) => (
+          {meals.map((meal) => (
             <div
               key={meal.id}
               onClick={() => setSelectedMeal(meal)}
