@@ -47,6 +47,16 @@ struct MealAnalysisResponse: Content {
     let tshPercentChange: Double
     let t3PercentChange: Double
     let t4PercentChange: Double
+    let usdaMatchName: String
+    let usdaFdcId: String
+    let usdaDataType: String
+    let usdaQuery: String
+    let usdaApiCallLatencyMs: Int
+    let iodineMicrograms: Double
+    let seleniumMicrograms: Double
+    let calciumMilligrams: Double
+    let sodiumMilligrams: Double
+    let rawUsdaJsonResponse: String
     let nutritionDetails: [USDANutritionDetail]
 }
 
@@ -55,6 +65,8 @@ struct USDANutritionDetail: Content {
     let estimatedGrams: Double
     let usdaSearchQuery: String
     let usdaDescription: String
+    let usdaFdcId: String
+    let usdaDataType: String
     let calories: Double?
     let proteinGrams: Double?
     let carbohydrateGrams: Double?
@@ -429,79 +441,18 @@ struct MealAnalysisPipeline {
             throw Abort(.badRequest, reason: "No image data or local classifications were provided")
         }
 
-        if let geminiAPIKey = Environment.get("GEMINI_API_KEY"), !geminiAPIKey.isEmpty, geminiAPIKey != "replace_me" {
-            do {
-                return try await identifyFoodsWithGemini(
-                    imageBase64: imageBase64,
-                    mimeType: request.mimeType ?? "image/jpeg",
-                    localClassifications: request.localClassifications,
-                    apiKey: geminiAPIKey
-                )
-            } catch {
-                logger.error("Gemini request failed: \(error.localizedDescription)")
-            }
+        guard let geminiAPIKey = Environment.get("GEMINI_API_KEY"),
+              !geminiAPIKey.isEmpty,
+              geminiAPIKey != "replace_me" else {
+            throw Abort(.internalServerError, reason: "GEMINI_API_KEY is missing; Gemini 3.5 Flash is required for food-image classification")
         }
 
-        guard let apiKey = Environment.get("OPENAI_API_KEY"), !apiKey.isEmpty, apiKey != "replace_me" else {
-            if let localClassifications = request.localClassifications, !localClassifications.isEmpty {
-                logger.warning("No usable hosted vision API key; using local Vision classifications as fallback")
-                return buildVisionAnalysis(from: localClassifications)
-            }
-
-            logger.warning("No usable hosted vision API key or local classifications; using generic meal fallback")
-            return fallbackVisionAnalysis()
-        }
-
-        let model = Environment.get("OPENAI_MODEL") ?? "gpt-4.1-mini"
-        let mimeType = request.mimeType ?? "image/jpeg"
-        let dataURL = "data:\(mimeType);base64,\(imageBase64)"
-        let prompt = mealVisionPrompt(localClassifications: request.localClassifications)
-
-        let body: [String: Any] = [
-            "model": model,
-            "input": [
-                [
-                    "role": "user",
-                    "content": [
-                        ["type": "input_text", "text": prompt],
-                        ["type": "input_image", "image_url": dataURL]
-                    ]
-                ]
-            ],
-            "temperature": 0.1
-        ]
-
-        let response = try await client.post("https://api.openai.com/v1/responses") { req in
-            req.headers.bearerAuthorization = BearerAuthorization(token: apiKey)
-            req.headers.contentType = .json
-            let jsonData = try JSONSerialization.data(withJSONObject: body)
-            req.body = .init(data: jsonData)
-        }
-
-        guard response.status == .ok else {
-            let detail = response.body.flatMap { String(buffer: $0) } ?? "No response body"
-            logger.error("OpenAI request failed: \(detail)")
-
-            if let localClassifications = request.localClassifications, !localClassifications.isEmpty {
-                logger.warning("Using local Vision classifications because OpenAI failed")
-                return buildVisionAnalysis(from: localClassifications)
-            }
-
-            logger.warning("Using generic meal fallback because OpenAI failed and no local classifications were available")
-            return fallbackVisionAnalysis()
-        }
-
-        let openAIResponse = try response.content.decode(OpenAIResponse.self)
-        guard let text = openAIResponse.outputText else {
-            throw Abort(.badGateway, reason: "OpenAI did not return parseable meal JSON")
-        }
-
-        let jsonText = text.extractJSONObject()
-        guard let data = jsonText.data(using: .utf8) else {
-            throw Abort(.badGateway, reason: "OpenAI returned invalid UTF-8")
-        }
-
-        return try JSONDecoder().decode(VisionAnalysis.self, from: data)
+        return try await identifyFoodsWithGemini(
+            imageBase64: imageBase64,
+            mimeType: request.mimeType ?? "image/jpeg",
+            localClassifications: request.localClassifications,
+            apiKey: geminiAPIKey
+        )
     }
 
     private func identifyFoodsWithGemini(
@@ -510,7 +461,7 @@ struct MealAnalysisPipeline {
         localClassifications: [LocalFoodClassification]?,
         apiKey: String
     ) async throws -> VisionAnalysis {
-        let model = Environment.get("GEMINI_MODEL") ?? "gemini-3.1-pro-preview"
+        let model = Environment.get("GEMINI_MODEL") ?? "gemini-3.5-flash"
         let escapedModel = model.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? model
         let url = "https://generativelanguage.googleapis.com/v1beta/models/\(escapedModel):generateContent?key=\(apiKey)"
 
@@ -572,20 +523,11 @@ struct MealAnalysisPipeline {
         Trust the image more than the hints when they disagree.
         Return only compact JSON with this exact shape:
         {"mealName":"string","confidence":0.0,"foods":[{"name":"string","estimatedGrams":100,"usdaSearchQuery":"string"}]}
-        Confidence must be between 0 and 1. Use USDA-friendly search terms.
+        Confidence must be between 0 and 1. Each usdaSearchQuery must be a concise,
+        literal food description suitable for USDA FoodData Central, such as "guava raw",
+        "chicken breast roasted", or "white rice cooked". Do not put brand guesses,
+        serving sizes, explanatory prose, or unrelated ingredients in usdaSearchQuery.
         """
-    }
-
-    private func fallbackVisionAnalysis() -> VisionAnalysis {
-        VisionAnalysis(
-            mealName: "Scanned meal",
-            confidence: 0.48,
-            foods: [
-                VisionFood(name: "Mixed meal", estimatedGrams: 250, usdaSearchQuery: "mixed meal"),
-                VisionFood(name: "Vegetables", estimatedGrams: 90, usdaSearchQuery: "vegetables"),
-                VisionFood(name: "Protein food", estimatedGrams: 120, usdaSearchQuery: "chicken")
-            ]
-        )
     }
 
     private func buildVisionAnalysis(from classifications: [LocalFoodClassification]) -> VisionAnalysis {
@@ -618,7 +560,12 @@ struct MealAnalysisPipeline {
             throw Abort(.internalServerError, reason: "USDA_API_KEY is missing")
         }
 
+        guard !foods.isEmpty else {
+            throw Abort(.unprocessableEntity, reason: "The food image model returned no foods to search in USDA FoodData Central")
+        }
+
         var summary = NutritionSummary()
+        let startedAt = ContinuousClock.now
 
         for food in foods.prefix(6) {
             guard var components = URLComponents(string: "https://api.nal.usda.gov/fdc/v1/foods/search") else {
@@ -628,7 +575,7 @@ struct MealAnalysisPipeline {
             components.queryItems = [
                 URLQueryItem(name: "api_key", value: apiKey),
                 URLQueryItem(name: "query", value: food.usdaSearchQuery),
-                URLQueryItem(name: "pageSize", value: "1")
+                URLQueryItem(name: "pageSize", value: "10")
             ]
 
             guard let url = components.url else { continue }
@@ -636,12 +583,44 @@ struct MealAnalysisPipeline {
             guard response.status == .ok else { continue }
 
             let search = try response.content.decode(USDASearchResponse.self)
-            guard let match = search.foods.first else { continue }
+            guard let match = bestUSDAMatch(for: food.usdaSearchQuery, in: search.foods) else { continue }
 
             summary.add(detectedFood: food, usdaFood: match)
         }
 
+        guard !summary.details.isEmpty else {
+            throw Abort(.badGateway, reason: "USDA FoodData Central returned no nutrient matches for the classified food")
+        }
+
+        let elapsed = startedAt.duration(to: .now).components
+        summary.apiCallLatencyMs = Int(elapsed.seconds * 1_000) + Int(elapsed.attoseconds / 1_000_000_000_000_000)
         return summary.normalized()
+    }
+
+    private func bestUSDAMatch(for query: String, in foods: [USDAFood]) -> USDAFood? {
+        let queryTokens = searchTokens(in: query)
+        guard !queryTokens.isEmpty else { return nil }
+
+        return foods
+            .filter { $0.fdcId != nil }
+            .map { food in
+                let descriptionTokens = searchTokens(in: food.description ?? "")
+                let overlap = queryTokens.intersection(descriptionTokens).count
+                let coverage = Double(overlap) / Double(queryTokens.count)
+                return (food: food, coverage: coverage)
+            }
+            .filter { $0.coverage >= 0.5 }
+            .max { $0.coverage < $1.coverage }?
+            .food
+    }
+
+    private func searchTokens(in value: String) -> Set<String> {
+        let ignoredWords: Set<String> = ["and", "with", "the", "food", "fresh"]
+        return Set(
+            value.lowercased()
+                .components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .filter { $0.count > 1 && !ignoredWords.contains($0) }
+        )
     }
 
     private func buildResponse(vision: VisionAnalysis, nutrition: NutritionSummary) -> MealAnalysisResponse {
@@ -661,6 +640,16 @@ struct MealAnalysisPipeline {
             tshPercentChange: hormone.tshPercentChange,
             t3PercentChange: hormone.t3PercentChange,
             t4PercentChange: hormone.t4PercentChange,
+            usdaMatchName: nutrition.usdaMatchName,
+            usdaFdcId: nutrition.usdaFdcId,
+            usdaDataType: nutrition.usdaDataType,
+            usdaQuery: nutrition.usdaQuery,
+            usdaApiCallLatencyMs: nutrition.apiCallLatencyMs,
+            iodineMicrograms: nutrition.iodineMicrograms,
+            seleniumMicrograms: nutrition.seleniumMicrograms,
+            calciumMilligrams: nutrition.calciumMilligrams,
+            sodiumMilligrams: nutrition.sodiumMilligrams,
+            rawUsdaJsonResponse: nutrition.rawSummaryJSON,
             nutritionDetails: nutrition.details
         )
     }
@@ -737,6 +726,22 @@ struct NutritionSummary {
     var vitaminScore = 0.0
     var produceScore = 0.0
     var details: [USDANutritionDetail] = []
+    var usdaMatchName = ""
+    var usdaFdcId = ""
+    var usdaDataType = ""
+    var usdaQuery = ""
+    var apiCallLatencyMs = 0
+    var iodineMicrograms = 0.0
+    var seleniumMicrograms = 0.0
+    var calciumMilligrams = 0.0
+    var sodiumMilligrams = 0.0
+
+    var rawSummaryJSON: String {
+        let entries = details.map { detail in
+            "{\"detectedFood\":\"\(detail.detectedFood)\",\"usdaDescription\":\"\(detail.usdaDescription)\",\"estimatedGrams\":\(detail.estimatedGrams)}"
+        }
+        return "{\"foods\":[\(entries.joined(separator: ","))]}"
+    }
 
     var proteinPercent = 25
     var carbsPercent = 35
@@ -744,6 +749,8 @@ struct NutritionSummary {
     var producePercent = 20
 
     mutating func add(detectedFood: VisionFood, usdaFood: USDAFood) {
+        guard let fdcId = usdaFood.fdcId else { return }
+
         let grams = detectedFood.estimatedGrams
         let scale = max(grams, 1) / 100.0
         var calories: Double?
@@ -756,6 +763,13 @@ struct NutritionSummary {
         var vitaminC: Double?
         var vitaminBTotal = 0.0
         var vitaminD: Double?
+
+        if details.isEmpty {
+            usdaMatchName = usdaFood.description ?? detectedFood.name
+            usdaFdcId = String(fdcId)
+            usdaDataType = usdaFood.dataType ?? "USDA FoodData Central"
+            usdaQuery = detectedFood.usdaSearchQuery
+        }
 
         for nutrient in usdaFood.foodNutrients {
             let name = nutrient.nutrientName?.lowercased() ?? ""
@@ -786,6 +800,14 @@ struct NutritionSummary {
                 fat = value
             } else if name.contains("potassium") {
                 potassium = value
+            } else if name.contains("iodine") {
+                iodineMicrograms += value
+            } else if name.contains("selenium") {
+                seleniumMicrograms += value
+            } else if name.contains("calcium") {
+                calciumMilligrams += value
+            } else if name.contains("sodium") {
+                sodiumMilligrams += value
             }
         }
 
@@ -799,6 +821,8 @@ struct NutritionSummary {
                 estimatedGrams: grams,
                 usdaSearchQuery: detectedFood.usdaSearchQuery,
                 usdaDescription: usdaFood.description ?? "USDA entry",
+                usdaFdcId: String(fdcId),
+                usdaDataType: usdaFood.dataType ?? "USDA FoodData Central",
                 calories: calories,
                 proteinGrams: protein,
                 carbohydrateGrams: carbs,

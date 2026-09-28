@@ -13,11 +13,11 @@ Add your Gemini and USDA keys to `.env`. OpenAI is optional fallback if configur
 
 ```bash
 GEMINI_API_KEY=your_key_here
-GEMINI_MODEL=gemini-3.1-pro-preview
+GEMINI_MODEL=gemini-3.5-flash
 USDA_API_KEY=your_key_here
 ```
 
-Nano Banana Pro is an image generation/editing model. For meal image understanding, use a Gemini multimodal text model such as `gemini-3.1-pro-preview`, or override `GEMINI_MODEL` if your account exposes a different supported model.
+Meal photos are classified with the multimodal `gemini-3.5-flash` model before USDA FoodData Central lookup.
 
 Run:
 

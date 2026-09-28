@@ -252,11 +252,16 @@ struct PicturePage: View {
     private func loadPersistedMeals() {
         guard !mealHistoryData.isEmpty,
               let decodedMeals = try? JSONDecoder().decode([MealAnalysis].self, from: mealHistoryData) else {
-            meals = [MealAnalysis.scannedSample]
+            meals = []
             return
         }
 
-        meals = decodedMeals
+        let validMeals = decodedMeals.filter { $0.usdaMatchName != "USDA match unavailable" }
+        meals = validMeals
+
+        if validMeals.count != decodedMeals.count {
+            saveMeals()
+        }
     }
 
     private func saveMeals() {
@@ -813,8 +818,14 @@ struct MealAnalysisDetailPage: View {
                         DetailFieldRow(title: "FDC ID", value: meal.usdaFdcId)
                         DetailFieldRow(title: "Data Type", value: meal.usdaDataType)
                         DetailFieldRow(title: "Submitted Query", value: meal.usdaQuery)
-                        DetailFieldRow(title: "API Call Latency", value: "\(meal.usdaApiCallLatencyMs) ms")
-                        DetailFieldRow(title: "HTTP Status", value: "200 OK (USDA FDC REST API)")
+                        DetailFieldRow(
+                            title: "API Call Latency",
+                            value: meal.usdaApiCallLatencyMs > 0 ? "\(meal.usdaApiCallLatencyMs) ms" : "Not provided"
+                        )
+                        DetailFieldRow(
+                            title: "USDA Metadata Status",
+                            value: meal.usdaFdcId == "Unavailable" ? "Incomplete backend response" : "Verified USDA match"
+                        )
 
                         Divider()
 
@@ -997,31 +1008,7 @@ struct MealAnalysis: Identifiable, Equatable, Codable {
     var sodiumMilligrams: Double = 420.0
     var goitrogenRiskLevel: String = "Low (Cooked Vegetables)"
     var levothyroxineAbsorptionRisk: String = "Moderate — Separate from dose by 4 hours"
-    var rawUsdaJsonResponse: String = """
-    {
-      "foodSearchCriteria": {
-        "query": "grilled chicken bowl",
-        "generalSearchInput": "chicken breast rice broccoli",
-        "pageNumber": 1
-      },
-      "totalHits": 42,
-      "foods": [
-        {
-          "fdcId": 171077,
-          "description": "Chicken breast, grilled with seasoned rice and steamed broccoli",
-          "dataType": "SR Legacy",
-          "foodNutrients": [
-            { "nutrientName": "Protein", "value": 31.8, "unitName": "G" },
-            { "nutrientName": "Carbohydrate, by difference", "value": 34.2, "unitName": "G" },
-            { "nutrientName": "Selenium, Se", "value": 34.8, "unitName": "UG" },
-            { "nutrientName": "Iodine, I", "value": 12.5, "unitName": "UG" },
-            { "nutrientName": "Calcium, Ca", "value": 45.0, "unitName": "MG" },
-            { "nutrientName": "Sodium, Na", "value": 420.0, "unitName": "MG" }
-          ]
-        }
-      ]
-    }
-    """
+    var rawUsdaJsonResponse: String = "{\"status\":\"USDA response unavailable\"}"
 
     var totalFoodPercent: Int {
         protein + carbs + vitamins + produce
@@ -1033,6 +1020,10 @@ struct MealAnalysis: Identifiable, Equatable, Codable {
         case usdaMatchName, usdaFdcId, usdaDataType, usdaQuery, usdaApiCallLatencyMs
         case iodineMicrograms, seleniumMicrograms, calciumMilligrams, sodiumMilligrams
         case goitrogenRiskLevel, levothyroxineAbsorptionRisk, rawUsdaJsonResponse
+    }
+
+    private enum NutritionCodingKeys: String, CodingKey {
+        case nutritionDetails
     }
 
     init(
@@ -1050,17 +1041,17 @@ struct MealAnalysis: Identifiable, Equatable, Codable {
         tshPercentChange: Double,
         t3PercentChange: Double,
         t4PercentChange: Double,
-        usdaMatchName: String = "Grilled Chicken Breast & Rice Bowl (USDA #171077)",
-        usdaFdcId: String = "171077",
-        usdaDataType: String = "SR Legacy / Foundation",
-        usdaQuery: String = "chicken breast rice broccoli",
-        usdaApiCallLatencyMs: Int = 142,
-        iodineMicrograms: Double = 12.5,
-        seleniumMicrograms: Double = 34.8,
-        calciumMilligrams: Double = 45.0,
-        sodiumMilligrams: Double = 420.0,
-        goitrogenRiskLevel: String = "Low (Cooked Vegetables)",
-        levothyroxineAbsorptionRisk: String = "Moderate — Separate from dose by 4 hours",
+        usdaMatchName: String = "USDA match unavailable",
+        usdaFdcId: String = "Unavailable",
+        usdaDataType: String = "Unavailable",
+        usdaQuery: String = "Unavailable",
+        usdaApiCallLatencyMs: Int = 0,
+        iodineMicrograms: Double = 0,
+        seleniumMicrograms: Double = 0,
+        calciumMilligrams: Double = 0,
+        sodiumMilligrams: Double = 0,
+        goitrogenRiskLevel: String = "Not evaluated",
+        levothyroxineAbsorptionRisk: String = "Not evaluated",
         rawUsdaJsonResponse: String? = nil
     ) {
         self.id = id
@@ -1110,17 +1101,40 @@ struct MealAnalysis: Identifiable, Equatable, Codable {
         t3PercentChange = try container.decode(Double.self, forKey: .t3PercentChange)
         t4PercentChange = try container.decode(Double.self, forKey: .t4PercentChange)
 
-        usdaMatchName = try container.decodeIfPresent(String.self, forKey: .usdaMatchName) ?? "Grilled Chicken Breast & Rice Bowl (USDA #171077)"
-        usdaFdcId = try container.decodeIfPresent(String.self, forKey: .usdaFdcId) ?? "171077"
-        usdaDataType = try container.decodeIfPresent(String.self, forKey: .usdaDataType) ?? "SR Legacy"
-        usdaQuery = try container.decodeIfPresent(String.self, forKey: .usdaQuery) ?? name.lowercased()
-        usdaApiCallLatencyMs = try container.decodeIfPresent(Int.self, forKey: .usdaApiCallLatencyMs) ?? 142
-        iodineMicrograms = try container.decodeIfPresent(Double.self, forKey: .iodineMicrograms) ?? 12.5
-        seleniumMicrograms = try container.decodeIfPresent(Double.self, forKey: .seleniumMicrograms) ?? 34.8
-        calciumMilligrams = try container.decodeIfPresent(Double.self, forKey: .calciumMilligrams) ?? 45.0
-        sodiumMilligrams = try container.decodeIfPresent(Double.self, forKey: .sodiumMilligrams) ?? 420.0
-        goitrogenRiskLevel = try container.decodeIfPresent(String.self, forKey: .goitrogenRiskLevel) ?? "Low"
-        levothyroxineAbsorptionRisk = try container.decodeIfPresent(String.self, forKey: .levothyroxineAbsorptionRisk) ?? "Moderate — Separate from dose by 4 hours"
+        let nutritionContainer = try decoder.container(keyedBy: NutritionCodingKeys.self)
+        let legacyNutritionDetails = try nutritionContainer.decodeIfPresent(
+            [MealUSDANutritionDetail].self,
+            forKey: .nutritionDetails
+        ) ?? []
+        let firstUSDAMatch = legacyNutritionDetails.first
+
+        usdaMatchName = try container.decodeIfPresent(String.self, forKey: .usdaMatchName)
+            ?? firstUSDAMatch?.usdaDescription
+            ?? "USDA match unavailable"
+        usdaFdcId = try container.decodeIfPresent(String.self, forKey: .usdaFdcId)
+            ?? firstUSDAMatch?.usdaFdcId
+            ?? "Unavailable"
+        usdaDataType = try container.decodeIfPresent(String.self, forKey: .usdaDataType)
+            ?? firstUSDAMatch?.usdaDataType
+            ?? "Unavailable"
+        usdaQuery = try container.decodeIfPresent(String.self, forKey: .usdaQuery)
+            ?? firstUSDAMatch?.usdaSearchQuery
+            ?? "Unavailable"
+        usdaApiCallLatencyMs = try container.decodeIfPresent(Int.self, forKey: .usdaApiCallLatencyMs) ?? 0
+        iodineMicrograms = try container.decodeIfPresent(Double.self, forKey: .iodineMicrograms) ?? 0
+        seleniumMicrograms = try container.decodeIfPresent(Double.self, forKey: .seleniumMicrograms) ?? 0
+        calciumMilligrams = try container.decodeIfPresent(Double.self, forKey: .calciumMilligrams) ?? 0
+        sodiumMilligrams = try container.decodeIfPresent(Double.self, forKey: .sodiumMilligrams) ?? 0
+        goitrogenRiskLevel = try container.decodeIfPresent(String.self, forKey: .goitrogenRiskLevel) ?? "Not evaluated"
+        levothyroxineAbsorptionRisk = try container.decodeIfPresent(String.self, forKey: .levothyroxineAbsorptionRisk) ?? "Not evaluated"
+        if let rawResponse = try container.decodeIfPresent(String.self, forKey: .rawUsdaJsonResponse) {
+            rawUsdaJsonResponse = rawResponse
+        } else if let encodedDetails = try? JSONEncoder().encode(legacyNutritionDetails),
+                  let detailsJSON = String(data: encodedDetails, encoding: .utf8) {
+            rawUsdaJsonResponse = detailsJSON
+        } else {
+            rawUsdaJsonResponse = "{\"status\":\"USDA response unavailable\"}"
+        }
     }
 
     static let scannedSample = MealAnalysis(
@@ -1168,6 +1182,13 @@ struct MealAnalysis: Identifiable, Equatable, Codable {
             rawUsdaJsonResponse: rawUsdaJsonResponse
         )
     }
+}
+
+private struct MealUSDANutritionDetail: Codable {
+    let usdaSearchQuery: String
+    let usdaDescription: String
+    let usdaFdcId: String?
+    let usdaDataType: String?
 }
 
 // MARK: - USDA LOOKUP SIMULATOR FOR SEARCH INSPECTOR TAB

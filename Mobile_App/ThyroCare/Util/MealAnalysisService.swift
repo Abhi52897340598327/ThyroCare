@@ -6,6 +6,7 @@ enum MealAnalysisServiceError: Error {
     case invalidBaseURL
     case invalidImageData
     case badResponse(statusCode: Int, reason: String)
+    case foodNotRecognized
 }
 
 struct MealAnalysisService {
@@ -100,6 +101,10 @@ struct MealAnalysisService {
             return "Backend error \(statusCode): \(reason)"
         }
 
+        if case MealAnalysisServiceError.foodNotRecognized = error {
+            return "No food could be identified in this photo. Retake it with the meal clearly visible and well lit."
+        }
+
         return "Meal analysis failed: \(error.localizedDescription)"
     }
 }
@@ -143,7 +148,12 @@ enum LocalFoodImageClassifier {
                 )
             }
 
-        return Array(classifications.prefix(5))
+        let topClassifications = Array(classifications.prefix(5))
+        guard !topClassifications.isEmpty else {
+            throw MealAnalysisServiceError.foodNotRecognized
+        }
+
+        return topClassifications
     }
 
     private static func foodSearchQuery(for identifier: String) -> String {
@@ -249,7 +259,19 @@ enum MealThyroidImpactCalculator {
             t4Impact: impact.t4Description,
             tshPercentChange: impact.tshPercentChange,
             t3PercentChange: impact.t3PercentChange,
-            t4PercentChange: impact.t4PercentChange
+            t4PercentChange: impact.t4PercentChange,
+            usdaMatchName: meal.usdaMatchName,
+            usdaFdcId: meal.usdaFdcId,
+            usdaDataType: meal.usdaDataType,
+            usdaQuery: meal.usdaQuery,
+            usdaApiCallLatencyMs: meal.usdaApiCallLatencyMs,
+            iodineMicrograms: meal.iodineMicrograms,
+            seleniumMicrograms: meal.seleniumMicrograms,
+            calciumMilligrams: meal.calciumMilligrams,
+            sodiumMilligrams: meal.sodiumMilligrams,
+            goitrogenRiskLevel: meal.goitrogenRiskLevel,
+            levothyroxineAbsorptionRisk: meal.levothyroxineAbsorptionRisk,
+            rawUsdaJsonResponse: meal.rawUsdaJsonResponse
         )
     }
 
