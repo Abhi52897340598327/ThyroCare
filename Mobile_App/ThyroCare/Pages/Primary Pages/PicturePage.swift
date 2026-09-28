@@ -2,11 +2,12 @@ import SwiftUI
 import UIKit
 import AVFoundation
 import Combine
+import WebKit
 
 struct PicturePage: View {
     @State private var meals: [MealAnalysis] = []
     @State private var showingScanner = false
-    @State private var selectedTabMode = 0 // 0: Scanner, 1: USDA API Inspector, 2: Meal History
+    @State private var selectedTabMode = 0 // 0: Scanner, 1: Live Web Portal, 2: USDA API Inspector, 3: Meal History
     @State private var usdaSearchQuery = "Grilled Chicken Bowl"
     @State private var selectedMealForDetail: MealAnalysis?
     @AppStorage("mealHistoryData") private var mealHistoryData = Data()
@@ -23,8 +24,9 @@ struct PicturePage: View {
             // Sub-Navigation Segment Control
             Picker("View Mode", selection: $selectedTabMode) {
                 Text("Scanner").tag(0)
-                Text("USDA API").tag(1)
-                Text("Log History").tag(2)
+                Text("Web Portal").tag(1)
+                Text("USDA API").tag(2)
+                Text("Log History").tag(3)
             }
             .pickerStyle(.segmented)
             .padding(.bottom, 6)
@@ -69,6 +71,20 @@ struct PicturePage: View {
                     showingScanner = true
                 }
 
+                Link(destination: URL(string: "https://thyrocare-9qfo.onrender.com/clinician/food-analysis")!) {
+                    HStack {
+                        Image(systemName: "globe")
+                        Text("Open Web Dashboard Food Analysis")
+                            .font(.subheadline.weight(.bold))
+                        Spacer()
+                        Image(systemName: "arrow.up.right.square")
+                    }
+                    .foregroundStyle(ThyroUI.teal)
+                    .padding(14)
+                    .background(ThyroUI.softGray)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+
                 if let meal = meals.first {
                     ThyroCard {
                         ThyroSectionTitle("Latest Scan Overview", subtitle: meal.name)
@@ -98,7 +114,36 @@ struct PicturePage: View {
                 }
 
             } else if selectedTabMode == 1 {
-                // MARK: - TAB 2: USDA FOODDATA CENTRAL API INSPECTOR
+                // MARK: - TAB 2: LIVE EMBEDDED WEB DASHBOARD FOOD ANALYSIS
+                ThyroCard {
+                    ThyroSectionTitle("Live Web Portal", subtitle: "thyrocare-9qfo.onrender.com/clinician/food-analysis")
+
+                    HStack {
+                        HStack(spacing: 6) {
+                            Image(systemName: "checkmark.circle.fill")
+                            Text("Connected to Live Cloud Server")
+                        }
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(ThyroUI.teal)
+
+                        Spacer()
+
+                        Link("Open Safari ↗", destination: URL(string: "https://thyrocare-9qfo.onrender.com/clinician/food-analysis")!)
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(ThyroUI.navy)
+                    }
+
+                    WebPortalView(url: URL(string: "https://thyrocare-9qfo.onrender.com/clinician/food-analysis")!)
+                        .frame(height: 520)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                        )
+                }
+
+            } else if selectedTabMode == 2 {
+                // MARK: - TAB 3: USDA FOODDATA CENTRAL API INSPECTOR
                 ThyroCard {
                     ThyroSectionTitle("USDA API Live Inspector", subtitle: "Inspect raw FoodData Central (FDC) query parameters and response payloads.")
 
@@ -170,7 +215,7 @@ struct PicturePage: View {
                 }
 
             } else {
-                // MARK: - TAB 3: MEAL LOG HISTORY
+                // MARK: - TAB 4: MEAL LOG HISTORY
                 ThyroCard {
                     ThyroSectionTitle("Meal History", subtitle: "\(meals.count) saved scan records.")
 
@@ -217,6 +262,26 @@ struct PicturePage: View {
     private func saveMeals() {
         guard let encodedMeals = try? JSONEncoder().encode(meals) else { return }
         mealHistoryData = encodedMeals
+    }
+}
+
+struct WebPortalView: UIViewRepresentable {
+    let url: URL?
+
+    func makeUIView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        if let url {
+            let request = URLRequest(url: url)
+            webView.load(request)
+        }
+        return webView
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {
+        if let url, uiView.url != url {
+            uiView.load(URLRequest(url: url))
+        }
     }
 }
 

@@ -17,7 +17,7 @@ struct MealAnalysisService {
             return url
         }
 
-        return URL(string: "http://127.0.0.1:8080")!
+        return URL(string: "https://thyrocare-9qfo.onrender.com")!
     }
 
     func analyze(imageData: Data, mimeType: String = "image/jpeg") async throws -> MealAnalysis {
@@ -90,7 +90,7 @@ struct MealAnalysisService {
         if let urlError = error as? URLError {
             switch urlError.code {
             case .cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet, .timedOut:
-                return "Could not reach the ThyroCare backend. Make sure the server is running and the backend URL points to your Mac."
+                return "Could not reach the ThyroCare backend (https://thyrocare-9qfo.onrender.com). Please check your internet connection."
             default:
                 return "Network error: \(urlError.localizedDescription)"
             }
