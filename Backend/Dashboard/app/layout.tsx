@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import LiveFoodAnalysisSummary from "@/components/LiveFoodAnalysisSummary";
 
 export const metadata: Metadata = {
   title: "ThyroCare Dashboard",
@@ -14,6 +15,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen bg-slate-100 text-slate-900 antialiased font-sans">
+        <LiveFoodAnalysisSummary />
         {children}
       </body>
     </html>
