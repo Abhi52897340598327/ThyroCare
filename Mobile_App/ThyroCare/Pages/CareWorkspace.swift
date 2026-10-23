@@ -119,7 +119,7 @@ struct CareTabs: View {
             }
         }
         .sheet(isPresented: Binding(get: { store.showQuestionnaire }, set: { store.showQuestionnaire = $0 })) {
-            NavigationStack { CareQuestionnaireView(store: store) }
+            NavigationStack { QuestionairePage() }
         }
         .sheet(item: $notificationRouter.route) { route in
             CareReminderDestination(store: store, route: route)
@@ -141,7 +141,7 @@ struct CareTodayView: View {
                 Text(Date.now.formatted(date: .complete, time: .omitted)).foregroundStyle(.secondary)
                 CareSyncView(store: store)
                 CareSection(title: "Your questionnaire") {
-                    NavigationLink(store.questionnaireRecord?.fields["status"] == "complete" ? "Review questionnaire" : "Start or continue questionnaire") { CareQuestionnaireView(store: store) }
+                    NavigationLink("Open questionnaire") { QuestionairePage() }
                     NavigationLink("Explore simulated records") { CareSampleDataView() }
                 }
                 CareSection(title: "Today’s plan") {
@@ -200,7 +200,7 @@ struct CareTrackView: View {
     var body: some View {
         List {
             Section("Getting started") {
-                NavigationLink("Questionnaire") { CareQuestionnaireView(store: store) }
+                NavigationLink("Questionnaire") { QuestionairePage() }
                 NavigationLink("Simulated sample data") { CareSampleDataView() }
             }
             Section("Record types") {

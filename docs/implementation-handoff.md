@@ -1,3 +1,7 @@
+> **Questionnaire rollback:** All native questionnaire entry points now open the original `QuestionairePage` from `fbf5c2f5`, unchanged. The replacement step-by-step questionnaire is no longer routed. Previously saved server questionnaire records are retained; the original form retains its legacy local-storage behavior.
+
+> **Dashboard rollback, 2026-10-23:** At the user’s explicit request, the original native dashboard, seven-tab presentation, and original web dashboard page layouts were restored from `fbf5c2f5`. The earlier five-tab/design-replacement descriptions below are historical. Server login, SQLite records, questionnaire, and isolated sample data remain. Native shared records are reached through the profile control; the connected web record portal is at `/records`. Original dashboard fixtures/legacy visualizations are restored with their original limitations; they are not evidence that every old screen now consumes shared records. No patient database, cache or account was deleted. Full feature integration into the original design remains unfinished.
+
 # Redesign implementation handoff — 2026-10-23
 
 ## Status

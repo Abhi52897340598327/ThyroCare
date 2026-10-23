@@ -1,2 +1,17 @@
-import "@/components/care.css";
-export default function Page() { return <main className="care-app"><section className="care-card"><h1>Find a clinician</h1><p>Search the official Medicare provider directory. ThyroCare does not verify appointment availability or endorse a clinician.</p><a href="https://www.medicare.gov/care-compare/" rel="noreferrer">Open Medicare Care Compare</a><p><a href="/">Return to care records</a></p></section></main>; }
+import FamilyAppShell from "@/components/FamilyAppShell";
+import EndocrinologistSearch from "@/components/EndocrinologistSearch";
+import { PageHeading } from "@/components/DashboardUI";
+export default function ProviderSearchPage() {
+  return (
+    <FamilyAppShell>
+      <div className="tc-page">
+        <PageHeading
+          eyebrow="BUILD YOUR CARE TEAM"
+          title="Find care, closer to you."
+          description="Take the next step toward a conversation about your thyroid health and diet."
+        />
+        <EndocrinologistSearch />
+      </div>
+    </FamilyAppShell>
+  );
+}

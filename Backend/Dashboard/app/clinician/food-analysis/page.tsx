@@ -1,2 +1,5 @@
-import CarePortal from "@/components/CarePortal";
-export default function Page() { return <CarePortal />; }
+import FoodAnalysisClient from "./FoodAnalysisClient";
+
+export default function FoodAnalysisPage() {
+  return <FoodAnalysisClient />;
+}
