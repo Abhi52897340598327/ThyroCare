@@ -1,0 +1,122 @@
+[
+  {
+    "route": "clinician/data/page.tsx",
+    "behavior": "Authorized care workspace"
+  },
+  {
+    "route": "clinician/food-analysis/page.tsx",
+    "behavior": "Authorized care workspace"
+  },
+  {
+    "route": "clinician/monitoring/page.tsx",
+    "behavior": "Authorized care workspace"
+  },
+  {
+    "route": "clinician/notifications/page.tsx",
+    "behavior": "Authorized care workspace"
+  },
+  {
+    "route": "clinician/patients/[patient_id]/alerts/page.tsx",
+    "behavior": "Authorized care workspace"
+  },
+  {
+    "route": "clinician/patients/[patient_id]/appointments/page.tsx",
+    "behavior": "Authorized care workspace"
+  },
+  {
+    "route": "clinician/patients/[patient_id]/audit/page.tsx",
+    "behavior": "Authorized care workspace"
+  },
+  {
+    "route": "clinician/patients/[patient_id]/family/page.tsx",
+    "behavior": "Authorized care workspace"
+  },
+  {
+    "route": "clinician/patients/[patient_id]/labs/page.tsx",
+    "behavior": "Authorized care workspace"
+  },
+  {
+    "route": "clinician/patients/[patient_id]/medications/page.tsx",
+    "behavior": "Authorized care workspace"
+  },
+  {
+    "route": "clinician/patients/[patient_id]/notes/page.tsx",
+    "behavior": "Authorized care workspace"
+  },
+  {
+    "route": "clinician/patients/[patient_id]/nutrition/page.tsx",
+    "behavior": "Authorized care workspace"
+  },
+  {
+    "route": "clinician/patients/[patient_id]/page.tsx",
+    "behavior": "Authorized care workspace"
+  },
+  {
+    "route": "clinician/patients/[patient_id]/reports/page.tsx",
+    "behavior": "Authorized care workspace"
+  },
+  {
+    "route": "clinician/patients/[patient_id]/sharing/page.tsx",
+    "behavior": "Authorized care workspace"
+  },
+  {
+    "route": "clinician/patients/[patient_id]/summary/page.tsx",
+    "behavior": "Authorized care workspace"
+  },
+  {
+    "route": "clinician/patients/[patient_id]/symptoms/page.tsx",
+    "behavior": "Authorized care workspace"
+  },
+  {
+    "route": "clinician/patients/[patient_id]/timeline/page.tsx",
+    "behavior": "Authorized care workspace"
+  },
+  {
+    "route": "clinician/patients/[patient_id]/trends/page.tsx",
+    "behavior": "Authorized care workspace"
+  },
+  {
+    "route": "clinician/reports/page.tsx",
+    "behavior": "Authorized care workspace"
+  },
+  {
+    "route": "clinician/search/page.tsx",
+    "behavior": "Authorized care workspace"
+  },
+  {
+    "route": "clinician/settings/page.tsx",
+    "behavior": "Authorized care workspace"
+  },
+  {
+    "route": "clinician/users/page.tsx",
+    "behavior": "Authorized care workspace"
+  },
+  {
+    "route": "debug/page.tsx",
+    "behavior": "Explicitly unavailable or external provider directory"
+  },
+  {
+    "route": "family/appointments/page.tsx",
+    "behavior": "Explicitly unavailable or external provider directory"
+  },
+  {
+    "route": "family/members/[memberId]/page.tsx",
+    "behavior": "Explicitly unavailable or external provider directory"
+  },
+  {
+    "route": "family/page.tsx",
+    "behavior": "Explicitly unavailable or external provider directory"
+  },
+  {
+    "route": "family/reports/page.tsx",
+    "behavior": "Explicitly unavailable or external provider directory"
+  },
+  {
+    "route": "family/settings/page.tsx",
+    "behavior": "Explicitly unavailable or external provider directory"
+  },
+  {
+    "route": "providers/page.tsx",
+    "behavior": "Explicitly unavailable or external provider directory"
+  }
+]

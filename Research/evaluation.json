@@ -1,0 +1,169 @@
+{
+  "plan": {
+    "version": "exploratory-prediction-v1",
+    "registered_before_execution": "2026-10-22",
+    "purpose": "Unweighted cross-sectional predictive feasibility benchmark; not population inference or clinical validation",
+    "seed": 20261022,
+    "development_fraction": 0.8,
+    "split_unit": "cycle:SEQN",
+    "cohort": "Adults >=18 with reliable day-one recall and positive measured TSH, Free T3 and Free T4; no outcome-based trimming",
+    "outcomes": {
+      "log_TSH": "natural log of LBXTSH1 (\u00b5IU/mL)",
+      "Free_T3": "LBXT3F (pg/mL)",
+      "Free_T4": "LBXT4F (ng/dL)"
+    },
+    "models": [
+      "training-mean baseline",
+      "ridge linear regression"
+    ],
+    "ridge_alpha_candidates": [
+      0.1,
+      1.0,
+      10.0,
+      100.0
+    ],
+    "selection": "Five fixed folds within development; minimize equally weighted standardized outcome MSE",
+    "preprocessing": "SEQN joins within cycle; reliable recall days averaged by participant; separate physical nutrient units; development-fold median imputation and standardization only",
+    "test_policy": "Persist membership before model fitting. Evaluate locked 20 percent once. Existing output blocks rerunning evaluation.",
+    "release_gate": "Joint dietary/thyroid sample weighting, clinical eligibility, confounding, model calibration and external validation not reviewed. Artifact is research-only and not consumed by serving clients."
+  },
+  "cohort_flow": {
+    "thyroid_merged": 11638,
+    "adults": 10038,
+    "reliable_day_one": 9443,
+    "all_three_positive_measured_outcomes": 8746,
+    "development": 6996,
+    "test": 1750
+  },
+  "outcome_order": [
+    "log_TSH",
+    "Free_T3_pg_mL",
+    "Free_T4_ng_dL"
+  ],
+  "missingness_fraction": {
+    "KCAL": 0.0,
+    "PROT": 0.0,
+    "CARB": 0.0,
+    "TFAT": 0.0,
+    "FIBE": 0.0,
+    "SUGR": 0.0,
+    "CALC": 0.0,
+    "IRON": 0.0,
+    "SODI": 0.0,
+    "ZINC": 0.0,
+    "POTA": 0.0,
+    "SELE": 0.0,
+    "VB12": 0.0,
+    "VB6": 0.0,
+    "VC": 0.0,
+    "RIDAGEYR": 0.0,
+    "RIAGENDR": 0.0,
+    "BMXBMI": 0.012348502172421678
+  },
+  "feature_units": {
+    "KCAL": "kcal",
+    "PROT": "g",
+    "CARB": "g",
+    "TFAT": "g",
+    "FIBE": "g",
+    "SUGR": "g",
+    "CALC": "mg",
+    "IRON": "mg",
+    "SODI": "mg",
+    "ZINC": "mg",
+    "POTA": "mg",
+    "SELE": "\u00b5g",
+    "VB12": "\u00b5g",
+    "VB6": "mg",
+    "VC": "mg",
+    "RIDAGEYR": "years",
+    "RIAGENDR": "NHANES recorded sex code",
+    "BMXBMI": "kg/m\u00b2"
+  },
+  "split_sha256": "02b299356ae3ce75a66c99b3a5a7153a84db6918fcb900c0faae1ed88b76686f",
+  "selected_alpha": 100.0,
+  "development_cv_standardized_mse": {
+    "0.1": 0.9898176481136443,
+    "1.0": 0.9898115741338707,
+    "10.0": 0.9897659046140281,
+    "100.0": 0.9897128237239782
+  },
+  "held_out": {
+    "r2": [
+      0.023770588089184086,
+      0.2160184582348843,
+      0.008732845422174895
+    ],
+    "mae": [
+      0.5228347976445098,
+      0.25507772003162416,
+      0.1106497918256143
+    ],
+    "rmse": [
+      0.7367802545088059,
+      0.34488744574957764,
+      0.15228332737409978
+    ]
+  },
+  "raw_units": {
+    "r2": [
+      -0.028658769174741305,
+      0.2160184582348843,
+      0.008732845422174895
+    ],
+    "mae": [
+      0.9844299932468052,
+      0.25507772003162416,
+      0.1106497918256143
+    ],
+    "rmse": [
+      2.474592254375943,
+      0.34488744574957764,
+      0.15228332737409978
+    ]
+  },
+  "training_mean_baseline": {
+    "r2": [
+      -5.119066684189377e-05,
+      -0.0032024483857915342,
+      -0.0004322863023731305
+    ],
+    "mae": [
+      0.5315974668453942,
+      0.3011099828473401,
+      0.10922643306379017
+    ],
+    "rmse": [
+      0.7457154654027401,
+      0.39013845409433834,
+      0.15298570385636867
+    ]
+  },
+  "r2_bootstrap_percentile_95": [
+    [
+      0.006365194658496975,
+      0.16787305027817218,
+      -0.010158180479353001
+    ],
+    [
+      0.039125593263452246,
+      0.2623298833194874,
+      0.024235408117690354
+    ]
+  ],
+  "unweighted_mean_r2": 0.08284063058208109,
+  "ambition_met": false,
+  "versions": {
+    "python": "3.13.13",
+    "numpy": "2.5.3",
+    "pandas": "3.0.5"
+  },
+  "limitations": [
+    "Unweighted prediction benchmark, not survey population inference",
+    "Cross-sectional samples, no individual food effects or symptom forecast",
+    "No medication, pregnancy or disease subgroup clinical validation",
+    "No external validation, prospective evaluation or calibrated patient intervals",
+    "Survey-methods review of joint dietary/thyroid weighting required",
+    "No runtime deployment or treatment recommendation"
+  ]
+}

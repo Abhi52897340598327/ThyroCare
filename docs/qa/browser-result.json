@@ -1,0 +1,13 @@
+{
+  "status": "passed",
+  "checks": [
+    "Distinct authenticated patient and clinician browsers linked by reviewed invitation",
+    "Censored lab saved without invented collection date or reference interval",
+    "Identical two-way message visible in separate browser sessions",
+    "Signed clinician note visible to patient",
+    "390 px viewport without document-level horizontal overflow; dark/reduced-motion screenshots captured",
+    "Browser session and identical records survive backend process restart and refresh",
+    "Second patient cannot fetch first patient records by altering ID"
+  ],
+  "scope": "Local Chrome with synthetic accounts; native messaging, VoiceOver and device notifications not verified"
+}

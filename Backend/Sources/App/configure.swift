@@ -902,11 +902,14 @@ public func configure(_ app: Application) throws {
     app.http.server.configuration.port = Environment.get("PORT").flatMap(Int.init) ?? 8080
 
     let corsConfiguration = CORSMiddleware.Configuration(
-        allowedOrigin: .all,
+        allowedOrigin: .custom(Environment.get("CARE_WEB_ORIGIN") ?? "http://localhost:3000"),
         allowedMethods: [.GET, .POST, .PUT, .DELETE, .OPTIONS],
-        allowedHeaders: [.accept, .authorization, .contentType, .origin, .xRequestedWith]
+        allowedHeaders: [.accept, .authorization, .contentType, .origin, .xRequestedWith],
+        allowCredentials: true
     )
     app.middleware.use(CORSMiddleware(configuration: corsConfiguration), at: .beginning)
+    app.middleware.use(RetiredClinicalAPIs())
+    try registerCareRoutes(app)
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
     app.views.use(.leaf)
     app.routes.defaultMaxBodySize = "16mb"
@@ -922,7 +925,7 @@ public func configure(_ app: Application) throws {
            let data = FileManager.default.contents(atPath: fallbackPath) {
             return Response(status: .ok, headers: ["content-type": "text/html; charset=utf-8"], body: .init(data: data))
         }
-        return dashboardResponse()
+        return Response(status: .serviceUnavailable, body: .init(string: "The web application build has not been installed. Build Backend/Dashboard and copy its out directory into Public."))
     }
 
     // MARK: - Core Root & Health

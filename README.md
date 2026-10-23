@@ -1,255 +1,82 @@
 # ThyroCare
 
-[![iOS](https://img.shields.io/badge/iOS-17%2B-111827.svg)](#prerequisites)
-[![Swift](https://img.shields.io/badge/Swift-5.9%2B-F05138.svg)](#tech-stack)
-[![Next.js](https://img.shields.io/badge/Next.js-14-000000.svg)](#tech-stack)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5%2B-3178C6.svg)](#tech-stack)
-[![License](https://img.shields.io/badge/license-MIT-0f766e.svg)](#license)
+ThyroCare is a native patient app and shared patient/clinician record workspace. The redesign is **in development, not ready for clinical deployment or App Store submission**. It does not measure thyroid hormones from meals or symptoms and does not recommend medication doses.
 
-ThyroCare is an end-to-end clinical telemetry and diagnostic engine built for the Congressional App Challenge. It addresses latency in endocrine management by converting adherence behavior, dietary disruptors, biometric context, and lab baselines into real-time clinical telemetry.
+The native app now opens a five-tab workspace: Today, Track, Meals, Trends and Care. Authenticated `/v1` APIs persist records and revisions in SQLite. The patient and clinician web entry points use those same APIs. Legacy fixture APIs and the global meal feed are retired.
 
-## Problem Statement
+## Canonical applications
 
-### The Clinical Gap
+- Native app: `ThyroCare.xcodeproj`, sources under `Mobile_App/ThyroCare`.
+- Backend: `Backend`, Swift 6 / Vapor, private SQLite storage.
+- **Canonical web application: `Backend/Dashboard`.** `Backend/Dockerfile` builds this directory. The older root `Dashboard` scripts delegate to it; do not develop another dashboard copy.
+- Research: `Research` and `Scripts/evaluate_nhanes_baseline.py`. Research artifacts are never served as clinical predictions.
 
-Endocrine management, specifically Levothyroxine adherence, suffers from a critical latency problem. Because thyroid metabolism relies on highly sensitive pharmacokinetics, hidden dietary disruptors such as unmeasured calcium, iron, or soy, and erratic medication timing can silently derail a patient's baseline weeks before the next endocrinologist visit.
+The Xcode project currently requires **iOS 26.5 or later**. Earlier iOS 17 support claims were incorrect. The installed SDK/build tool version is a separate requirement; compatibility has not been backported.
 
-Current patient data collection is severely fragmented and relies on high-friction manual logging. This leaves providers blind to a patient's biological momentum and reacting to outdated laboratory panels rather than real-time physiological trends.
+## Local development
 
-### The ThyroCare Architecture
+Use synthetic accounts and records. Production authentication operations, clinician MFA, abuse prevention, backup/restore operations, vendor agreements, clinical governance and release review remain incomplete.
 
-ThyroCare engineers a continuous, low-friction telemetry pipeline to eliminate this clinical blind spot. The native iOS client acts as a patient-side biometric sensor node, using a Vision-Language Model for heuristic dietary risk analysis and natural language processing for frictionless habit logging.
-
-This data is processed through a deterministic Shannon Entropy-Weighted TOPSIS diagnostic engine, trained on clinical datasets, to synthesize a real-time geometric severity score. Through an enterprise-grade Next.js clinical dashboard, providers receive instantaneous visibility into patient risk progression, predictive metabolic trendlines, and actionable telemetry events, transforming retrospective thyroid management into proactive care.
-
-## System Architecture
-
-ThyroCare is structured as a clinical telemetry pipeline with three primary execution surfaces:
-
-1. The native iOS client captures patient intake, biometric context, dietary evidence, and lab baseline inputs.
-2. The diagnostic engine normalizes clinical features and computes a deterministic 0-100 severity score.
-3. Firebase Firestore synchronizes telemetry state to the Next.js clinical dashboard in real time.
-
-```text
-┌─────────────────────────────────────┐
-│ iOS Client                           │
-│ Swift, AVFoundation, intake workflow │
-└──────────────────┬──────────────────┘
-                   │
-                   │ telemetry payload
-                   ▼
-┌─────────────────────────────────────┐
-│ Next.js Route Handler                │
-│ /api/telemetry                       │
-│ validation, authorization, ingestion │
-└──────────────────┬──────────────────┘
-                   │
-                   │ secure write
-                   ▼
-┌─────────────────────────────────────┐
-│ Firebase Firestore                   │
-│ telemetry collection, patient state  │
-└──────────────────┬──────────────────┘
-                   │
-                   │ real-time listener
-                   ▼
-┌─────────────────────────────────────┐
-│ Clinical Dashboard                   │
-│ Next.js, React, Tailwind, Recharts   │
-└─────────────────────────────────────┘
+```sh
+cd Backend
+swift test --disable-sandbox --build-system native
+swift run --disable-sandbox --build-system native Run
 ```
 
-The dashboard subscribes to Firestore with a real-time listener. When the iOS client or simulator posts telemetry to the ingestion route, the dashboard updates without a page refresh.
+The native SwiftPM build system avoids a local Xcode signing problem observed with dependency resource bundles. If caches are restricted, use the explicit cache arguments in `docs/implementation-handoff.md`.
 
-## Core Diagnostic Engine
+In another terminal:
 
-The diagnostic engine uses a deterministic Shannon Entropy-Weighted TOPSIS model trained against clinical priors derived from the Garvan Institute dataset. Shannon entropy weighting assigns feature importance by measuring dispersion across normalized clinical criteria, reducing subjective bias in multi-criteria decision analysis.
-
-TOPSIS then ranks patient state against ideal and anti-ideal clinical baselines. The resulting geometric proximity coefficient is projected onto a 0-100 severity scale for dashboard triage, longitudinal trend analysis, and alert classification.
-
-The iOS client also integrates AVFoundation with a GPT-4o mini Vision-Language Model workflow for heuristic dietary risk analysis. Image-derived dietary signals are treated as auxiliary risk evidence and should not override validated laboratory baselines, clinician review, or deterministic severity computation.
-
-## Tech Stack
-
-- Swift 5.9+
-- iOS 17+
-- Xcode 15+
-- AVFoundation
-- Gemini 3.5 Flash mini Vision-Language Model integration
-- Next.js 14 App Router
-- React 18
-- TypeScript 5+
-- Tailwind CSS
-- Shadcn UI component conventions
-- Recharts
-- Firebase Firestore
-- Firebase Admin SDK
-
-## Directory Structure
-
-```text
-ThyroCare/
-├── Mobile_App/                     # iOS client source
-│   └── ThyroCare/
-│       ├── Authetication/          # Authentication flows
-│       ├── Buttons/                # SwiftUI button primitives
-│       ├── Logos+Fields/           # SwiftUI fields and brand components
-│       ├── Main/                   # App entry points and root navigation
-│       ├── Pages/                  # Primary and secondary app screens
-│       └── Util/                   # Shared constants and utilities
-├── ThyroCare.xcodeproj/            # Xcode project
-├── Dashboard/                      # Web dashboard source
-│   ├── app/
-│   │   ├── api/
-│   │   │   └── telemetry/
-│   │   │       └── route.ts        # Telemetry ingestion endpoint
-│   │   ├── globals.css             # Tailwind global styles
-│   │   ├── layout.tsx              # App Router root layout
-│   │   └── page.tsx                # Clinical Mission Control dashboard
-│   ├── components/
-│   │   └── ui/                     # Shadcn-style UI primitives
-│   ├── lib/
-│   │   ├── firebase-admin.ts       # Server-side Firebase Admin client
-│   │   ├── firebase-client.ts      # Browser Firestore client
-│   │   └── utils.ts                # Shared UI utilities
-│   ├── package.json
-│   └── tailwind.config.ts
-└── README.md
+```sh
+cd Backend/Dashboard
+npm ci
+NEXT_PUBLIC_VAPOR_API_BASE_URL=http://localhost:8080 npm run dev
 ```
 
-Recommended long-term monorepo naming:
+The backend defaults to port 8080. Set `CARE_WEB_ORIGIN=http://localhost:3000` for this development setup. Both browser endpoints must use the same site hostname for the strict session cookie. Web tokens are not stored in localStorage. Native tokens use Keychain.
 
-```text
-ThyroCare/
-├── ios/                            # Native Swift client
-└── web/                            # Next.js dashboard
+For **Xcode Debug simulator runs**, `ThyroCareSimulatorBackendBaseURL` is `http://localhost:8080`. Start the updated backend on your Mac and keep the terminal open:
+
+```sh
+bash Scripts/start_simulator_backend.sh
 ```
 
-## Prerequisites
+Then run the app with Xcode (⌘R). Simulator accounts and records persist in `Backend/CareData`; restarting the process does not reset them. This is local storage on your Mac, not the hosted service. If port 8080 is already occupied, stop the previous ThyroCare backend before starting another.
 
-- Node.js 20 LTS or newer
-- npm 10 or newer
-- Xcode 15 or newer
-- Swift 5.9 or newer
-- iOS 17 SDK or newer
-- CocoaPods 1.15 or newer, if native dependencies are introduced through Pods
-- Firebase project with Firestore enabled
-- Firebase service account with write access to the target Firestore database
+Physical-device and Release builds use `ThyroCareBackendBaseURL` in `ThyroCare-Info.plist`; set it to the server that runs this branch. The existing hosted URL is **not evidence that these new routes have been deployed**. No hosted deployment was performed during this implementation. Build the native app with Xcode.
 
-## Installation & Quick Start
+Patient accounts can register through the native or web form. Clinician roles cannot be selected through the public registration API. To provision an independently verified development clinician, set `CARE_PROVISION_CLINICIAN=1`, `CARE_CLINICIAN_EMAIL`, `CARE_CLINICIAN_NAME`, and `CARE_CLINICIAN_PASSWORD` in the operator's environment, then run the backend once. Remove these provisioning variables before normal startup. Never commit credentials. Clinicians generate a one-use 15-minute invitation; patients review the clinician and explicitly accept all-record access. Practice identity, granular scopes and MFA remain release dependencies.
 
-Clone the repository:
+## Durable storage and deployment
 
-```bash
-git clone https://github.com/<owner>/ThyroCare.git
-cd ThyroCare
+`CARE_DATA_DIRECTORY` defaults to `CareData` within the backend working directory. It must be on a private persistent volume. An ephemeral hosting filesystem is not durable deployment. SQLite uses WAL and FULL synchronous writes; the actor serializes access and commits before acknowledging saves. This is a single-instance foundation, not a horizontally scaled database service. Private JPEGs reside in the same database and are fetched through authorization checks; there are no public photo URLs.
+
+```sh
+docker build -t thyrocare Backend
 ```
 
-Install dashboard dependencies:
+Configure a writable persistent directory for UID 10001, `CARE_DATA_DIRECTORY`, an exact `CARE_WEB_ORIGIN`, HTTPS termination and the production Vapor environment. Do not deploy this development build with real health records until the documented release gaps are resolved.
 
-```bash
-cd Dashboard
-npm install
+## Verification
+
+```sh
+python3 Scripts/check_care_api.py
+node --experimental-strip-types Scripts/check_roster.mjs
+npm run build --prefix Backend/Dashboard
 ```
 
-Create the dashboard environment file:
+The API check starts isolated temporary storage and synthetic accounts, exercises authorization and bidirectional messages, restarts the backend process, and verifies persistence and revoked access. It is not a substitute for two-device/browser interaction testing.
 
-```bash
-cp .env.example .env.local
+See [implementation handoff](docs/implementation-handoff.md), [API contract](docs/care-api.md), [reminder specification](docs/reminders.md), and [route coverage](docs/web-route-coverage.json).
+
+## Research result
+
+All 36 requested NHANES XPT files, 36 accompanying codebooks and the UCI archive were downloaded and checksummed in `Research/data-manifest.json`. Raw public downloads are ignored by Git. Recreate them using:
+
+```sh
+python3 Scripts/fetch_research_data.py
 ```
 
-Configure `Dashboard/.env.local`:
+The first locked held-out benchmark used 6,996 development and 1,750 test participants. R² was **0.02377 for log TSH, 0.21602 for Free T3, and 0.00873 for Free T4**; their equally weighted mean was **0.08284**, below the 0.85 ambition. These are unweighted cross-sectional prediction results, not population causal effects or clinical validation. The script refuses to overwrite an existing test evaluation. See [research report](Research/REPORT.md).
 
-```bash
-NEXT_PUBLIC_FIREBASE_API_KEY=
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
-NEXT_PUBLIC_FIREBASE_APP_ID=
-
-FIREBASE_PROJECT_ID=
-FIREBASE_CLIENT_EMAIL=
-FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-
-TELEMETRY_INGEST_TOKEN=
-```
-
-Run the dashboard locally:
-
-```bash
-npm run dev
-```
-
-Open the dashboard:
-
-```text
-http://localhost:3000
-```
-
-Verify telemetry ingestion:
-
-```bash
-curl -X POST http://localhost:3000/api/telemetry \
-  -H "Content-Type: application/json" \
-  -d '{"patient_id":"TC-90210","severity_score":85,"hr_variability":42}'
-```
-
-If `TELEMETRY_INGEST_TOKEN` is set, include the authorization header:
-
-```bash
-curl -X POST http://localhost:3000/api/telemetry \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
-  -d '{"patient_id":"TC-90210","severity_score":85,"hr_variability":42}'
-```
-
-Run production validation:
-
-```bash
-npm run lint
-npm run build
-```
-
-Run the iOS client:
-
-```bash
-cd ..
-open ThyroCare.xcodeproj
-```
-
-If CocoaPods are added to the iOS target:
-
-```bash
-cd Mobile_App
-pod install
-open ThyroCare.xcworkspace
-```
-
-## Security & Privacy
-
-ThyroCare should be operated under a privacy-first clinical architecture. Patient intake and image analysis should remain on device whenever possible, with the network boundary limited to the minimum telemetry required for physician review and longitudinal state synchronization.
-
-Production deployments must enforce:
-
-- authenticated telemetry ingestion
-- least-privilege Firebase service accounts
-- strict Firestore security rules
-- transport encryption
-- audit logging for clinical access events
-- environment-scoped secrets
-- no protected health information in client logs, analytics, or crash reports
-
-HIPAA compliance is not conferred by this repository alone. Any production clinical deployment requires a formal compliance program, signed business associate agreements where applicable, access controls, data retention policies, incident response procedures, and independent legal and security review.
-
-## License
-
-MIT License
-
-Copyright (c) 2026 ThyroCare
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files, to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+The old R coefficient exporter is retired because its fitted-data statistics and normalized mixed-unit coefficients were not valid serving predictions. A consented longitudinal symptom/lab/treatment cohort, survey-methods review, external clinical validation and intended-use/regulatory assessment remain necessary.

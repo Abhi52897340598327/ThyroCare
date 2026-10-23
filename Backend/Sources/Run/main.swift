@@ -11,6 +11,10 @@ struct ThyroCareBackend {
         defer { Task { try? await app.asyncShutdown() } }
 
         try configure(app)
-        try await app.execute()
+        if Environment.get("CARE_PROVISION_CLINICIAN") == "1" {
+            try await provisionCareClinician(app)
+        } else {
+            try await app.execute()
+        }
     }
 }

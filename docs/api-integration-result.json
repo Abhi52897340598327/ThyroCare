@@ -1,0 +1,20 @@
+{
+  "status": "passed",
+  "checks": [
+    "every record collection route",
+    "questionnaire progress survives restart",
+    "meal collection and export",
+    "export patient isolation",
+    "password verification",
+    "patient ID isolation",
+    "clinician invitation and consent",
+    "idempotent lab save with missing collection date and interval",
+    "identical two-way messages",
+    "patient-visible signed notes",
+    "request answered by clinician",
+    "durability across process restart",
+    "access revocation",
+    "session revocation"
+  ],
+  "scope": "Local HTTP API, synthetic accounts; not device/browser interaction evidence"
+}

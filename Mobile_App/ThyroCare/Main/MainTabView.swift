@@ -1,57 +1,9 @@
-//
-//  MainTabView.swift
-//  ThyroCare
-//
-//  Created by Abhiraam Venigalla on 5/26/26.
-//
-
 import SwiftUI
 
+/// The five-destination workspace replaces the legacy seven-tab navigation.
 struct MainTabView: View {
-    @State private var selectedTab: AppTab.MainTab = .home
-
+    let store: CareStore
     var body: some View {
-        TabView(selection: $selectedTab) {
-            Tab(Constants.homeString, systemImage: Constants.homeImage, value: AppTab.MainTab.home) {
-                VerifiedUserPage {
-                    selectedTab = .dashboard
-                }
-            }
-            
-            Tab(Constants.questionaireString, systemImage: Constants.questionaireImage, value: AppTab.MainTab.questionaire) {
-                NavigationStack {
-                    QuestionairePage()
-                }
-            }
-
-            Tab(Constants.summaryString, systemImage: Constants.summaryImage, value: AppTab.MainTab.summary) {
-                SummaryPage()
-            }
-            
-            Tab(Constants.dashboardString, systemImage: Constants.dashboardImage, value: AppTab.MainTab.dashboard) {
-                DashboardPage {
-                    selectedTab = .home
-                }
-            }
-
-            Tab(Constants.predictionString, systemImage: Constants.diagnosisImage, value: AppTab.MainTab.prediction) {
-                PredictionPage()
-            }
-
-            Tab(Constants.medicationString, systemImage: Constants.medicationImage, value: AppTab.MainTab.medication) {
-                MedicationLogPage()
-            }
-
-            Tab(Constants.pictureString, systemImage: Constants.pictureImage, value: AppTab.MainTab.picture) {
-                NavigationStack {
-                    PicturePage()
-                }
-            }
-        }
+        CareTabs(store: store)
     }
-}
-
-#Preview {
-    MainTabView()
-        .environmentObject(AuthManager())
 }

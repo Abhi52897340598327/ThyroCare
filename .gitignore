@@ -13,3 +13,12 @@ Backend/.env
 Backend/.env.*
 .env
 .env.*
+
+# Durable local development records (never commit health data)
+CareData/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+Research/raw/
+Research/artifacts/

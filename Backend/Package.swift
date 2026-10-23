@@ -11,10 +11,12 @@ let package = Package(
         .package(url: "https://github.com/vapor/leaf.git", from: "4.3.0")
     ],
     targets: [
+        .systemLibrary(name: "CSQLite", pkgConfig: "sqlite3", providers: [.apt(["libsqlite3-dev"])]),
         .target(
             name: "App",
             dependencies: [
                 .product(name: "Vapor", package: "vapor"),
+                "CSQLite",
                 .product(name: "Leaf", package: "leaf")
             ]
         ),

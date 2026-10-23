@@ -3,12 +3,13 @@
 FROM node:22-alpine AS dashboard-build
 WORKDIR /dashboard
 COPY Dashboard/package*.json ./
-RUN npm ci || npm install
+RUN npm ci
 COPY Dashboard ./
 RUN npm run build
 
 FROM swift:6.0-jammy AS build
 WORKDIR /build
+RUN apt-get update && apt-get install -y libsqlite3-dev
 COPY Package.swift ./
 COPY Sources ./Sources
 COPY Tests ./Tests
@@ -29,6 +30,7 @@ RUN apt-get update \
         libcurl4 \
         libjemalloc2 \
         libxml2 \
+        libsqlite3-0 \
         tzdata \
     && rm -rf /var/lib/apt/lists/*
 
@@ -41,7 +43,7 @@ COPY --from=build /build/Public /app/Public
 COPY --from=build /build/Resources /app/Resources
 COPY --from=dashboard-build /dashboard/out /app/Public
 
-RUN chown -R vapor:vapor /app
+RUN mkdir -p /app/CareData && chmod 700 /app/CareData && chown -R vapor:vapor /app
 
 USER vapor
 
