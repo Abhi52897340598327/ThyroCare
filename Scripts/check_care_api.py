@@ -58,6 +58,11 @@ def main():
                 assert call(f"patients/{pid}/{kind}", token=token) == []
             meal = write(pid, "meals", {"description": "Synthetic manual meal", "observedDate": "2026-01-02", "mealTime": "12:00"}, token)
             assert call(f"patients/{pid}/meals", token=token) == [meal]
+            analysis_path = f"patients/{pid}/meals/{meal['id']}/analyze"
+            call(analysis_path, "POST", {"consent": True}, b["token"], 403)
+            call(analysis_path, "POST", {"consent": False}, token, 403)
+            call(analysis_path, "POST", {"consent": True}, token, 404)  # No confirmed photo; never call AI.
+
             call("auth/login", "POST", {"email": "a@example.test", "password": "wrong-password"}, expected=401)
             call(f"patients/{pid}/labs", token=b["token"], expected=403)
             call(f"patients/{pid}/labs", token=ct, expected=403)

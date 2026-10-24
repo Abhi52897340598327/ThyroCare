@@ -84,6 +84,33 @@ func registerCareRoutes(_ app: Application) throws {
     api.get("patients", ":patient", "meals", ":meal", "photo") { req async throws -> MealPhotoResponse in
         try await database.photo(identity(req), patient: req.parameters.get("patient") ?? "", meal: req.parameters.get("meal") ?? "")
     }
+    api.post("patients", ":patient", "meals", ":meal", "analyze") { req async throws -> CareRecord in
+        let user = try await identity(req)
+        let patient = req.parameters.get("patient") ?? ""
+        let meal = req.parameters.get("meal") ?? ""
+        let consent = try req.content.decode([String: Bool].self)
+        guard consent["consent"] == true, user.id == patient else {
+            throw Abort(.forbidden, reason: "The patient must authorize sharing this photo with Google Gemini for analysis.")
+        }
+        guard let record = try await database.records(user, patient: patient, kind: "meals").first(where: { $0.id == meal }) else { throw Abort(.notFound, reason: "This meal has not synced to this server. Sync the meal before analyzing it.") }
+        if record.fields["analysisStatus"] == "complete" { return record }
+        let photo = try await database.photo(user, patient: patient, meal: meal)
+        var fields = record.fields
+        do {
+            let result = try await MealAnalysisPipeline(client: req.client, logger: req.logger).analyzeRecord(photo: photo.imageBase64)
+            fields.merge(result) { _, new in new }
+            fields["analysisInputVersion"] = String(record.version)
+            fields["aiConsentAt"] = Date().ISO8601Format()
+        } catch {
+            fields["analysisStatus"] = "failed"
+            if let failure = error as? AbortError {
+                fields["analysisError"] = failure.reason + ". Your photo is saved; retry after resolving this issue."
+            } else {
+                fields["analysisError"] = "The analysis provider returned an unreadable result. Your photo is saved; retry or log foods manually."
+            }
+        }
+        return try await database.write(user, patient: patient, kind: "meals", input: RecordWrite(id: meal, expectedVersion: record.version, fields: fields))
+    }
     api.get("patients", ":patient", "export") { req async throws -> CareRecordExport in
         let user = try await identity(req)
         let patient = req.parameters.get("patient") ?? ""
@@ -109,7 +136,15 @@ func registerCareRoutes(_ app: Application) throws {
             try await database.records(identity(req), patient: req.parameters.get("patient") ?? "", kind: kind, history: req.query[Bool.self, at: "history"] ?? false)
         }
         api.post("patients", ":patient", .constant(kind)) { req async throws -> CareRecord in
-            try await database.write(identity(req), patient: req.parameters.get("patient") ?? "", kind: kind, input: req.content.decode(RecordWrite.self))
+            var input = try req.content.decode(RecordWrite.self)
+            if kind == "meals" {
+                // Only the analysis endpoint produces current derived output. Edits require reanalysis.
+                for key in ["summary", "recognizedFoods", "nutritionDetails", "estimatedCaloriesKcal", "analysisModel", "analysisContract", "analysisAt", "analysisInputVersion", "analysisError", "aiConsentAt"] {
+                    input.fields.removeValue(forKey: key)
+                }
+                input.fields["analysisStatus"] = "pending"
+            }
+            return try await database.write(identity(req), patient: req.parameters.get("patient") ?? "", kind: kind, input: input)
         }
     }
 }
