@@ -15,6 +15,15 @@ struct CareDatabaseTests {
         return (db, a, b, clinician, path)
     }
 
+    @Test func savedLoginSurvivesServerRestartAndRemainsRevocable() async throws {
+        let (db, patient, _, _, path) = try await fixture()
+        let session = try await db.session(for: patient)
+        let restarted = try CareDatabase(path: path)
+        #expect(try await restarted.identity(token: session.token).id == patient.id)
+        try await restarted.logout(token: session.token)
+        await #expect(throws: Abort.self) { try await db.identity(token: session.token) }
+    }
+
     @Test func restartDurabilityIdempotencyAndHistory() async throws {
         let (db, a, _, _, path) = try await fixture()
         let input = RecordWrite(id: UUID().uuidString, expectedVersion: 0, fields: ["analyte": "Free T4", "result": "<0.01", "unit": "ng/dL", "receivedDate": "2026-01-02", "source": "Patient entered"])

@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
@@ -17,38 +17,51 @@ import {
   Panel,
   StatusBadge,
 } from "@/components/DashboardUI";
-import { MOCK_PATIENTS } from "@/lib/demoData";
+import { careAPI, CareRecord, Identity } from "@/lib/care-api";
+import { compareRoster, nextAppointment, RosterDates } from "@/lib/care-roster";
+type RosterRow = { id: string; name: string; age: string; sex: string; condition: string; latestTSH: string; unit: string; status: string; nextVisit: string; trend: string };
+
 export default function GlobalClinicianDashboard() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
-  const [sort, setSort] = useState<"name" | "tsh">("name");
+  const [sort, setSort] = useState("appointment");
   const [ascending, setAscending] = useState(true);
-  const review = MOCK_PATIENTS.filter((p) =>
-    ["REVIEW SUGGESTED", "TREND CHANGE", "NEW LAB RESULT"].includes(p.status),
-  );
-  const patients = MOCK_PATIENTS.filter(
-    (p) =>
-      `${p.name} ${p.condition} ${p.id}`
-        .toLowerCase()
-        .includes(search.toLowerCase()) &&
-      (status === "all" ||
-        (status === "review" ? review.includes(p) : p.status === status)),
-  ).sort(
-    (a, b) =>
-      (sort === "name"
-        ? a.name.localeCompare(b.name)
-        : a.latestTSH - b.latestTSH) * (ascending ? 1 : -1),
-  );
-  const toggle = (field: "name" | "tsh") => {
-    if (sort === field) setAscending(!ascending);
-    else {
-      setSort(field);
-      setAscending(true);
+  const [rows, setRows] = useState<RosterRow[]>([]);
+  const [dates, setDates] = useState<Record<string, RosterDates>>({});
+  const [error, setError] = useState("");
+  const [workspace, setWorkspace] = useState("");
+  useEffect(() => {
+    const abort = new AbortController();
+    async function load() {
+      try {
+        const me = await careAPI<Identity>("me", "GET", undefined, abort.signal);
+        if (me.role !== "clinician") throw new Error("Sign in with your clinician account to view the authorized roster.");
+        const people = await careAPI<Identity[]>("patients", "GET", undefined, abort.signal);
+        const output = await Promise.all(people.map(async p => {
+          const [labs, appointments, questionnaires] = await Promise.all(["labs", "appointments", "questionnaire"].map(kind => careAPI<CareRecord[]>(`patients/${p.id}/${kind}`, "GET", undefined, abort.signal)));
+          const dated = labs.filter(r => r.fields.collectedDate).sort((a,b) => b.fields.collectedDate.localeCompare(a.fields.collectedDate));
+          const latest = dated.find(r => r.fields.analyte === "TSH");
+          const appointment = nextAppointment(appointments, Date.now());
+          const q = questionnaires.at(-1)?.fields ?? {};
+          const row: RosterRow = { ...p, age:q.age || "Age not recorded", sex:q.sex || "Not recorded", condition:q.condition || "Not recorded", latestTSH:latest?.fields.result ?? "Not recorded", unit:latest?.fields.unit ?? "", status:labs.length ? "NEW LAB RESULT" : "INSUFFICIENT DATA", nextVisit:appointment ? new Date(appointment).toISOString() + " (UTC)" : "No upcoming appointment", trend:latest?.fields.collectedDate ?? "Collection date unknown" };
+          return {row, date:{appointment, lab:dated[0]?.fields.collectedDate}};
+        }));
+        if (abort.signal.aborted) return;
+        setWorkspace(me.id); setRows(output.map(o=>o.row)); setDates(Object.fromEntries(output.map(o=>[o.row.id,o.date]))); setError("");
+        const saved = localStorage.getItem(`thyrocare-roster-sort:${me.id}`); if (saved) setSort(saved);
+      } catch(e) { if (!abort.signal.aborted) setError((e as Error).message); }
     }
-  };
+    void load(); const timer=setInterval(()=>void load(),15000);
+    return ()=>{abort.abort();clearInterval(timer);};
+  }, []);
+  const review = rows.filter(p=>p.status === "NEW LAB RESULT");
+  const patients = rows.filter(p => `${p.name} ${p.condition} ${p.id}`.toLowerCase().includes(search.toLowerCase()) && (status === "all" || (status === "review" ? review.includes(p) : p.status === status))).sort((a,b) => compareRoster(a,b,dates,sort));
+  const chooseSort = (value: string) => { setSort(value); setAscending(true); if(workspace) localStorage.setItem(`thyrocare-roster-sort:${workspace}`,value); };
+  const toggle = (field: "name" | "tsh") => chooseSort(field === "tsh" ? "lab" : "name");
   return (
     <ClinicalAppShell>
       <div className="tc-page">
+        {error && <p role="alert">{error} <Link href="/records">Sign in / connect care team</Link></p>}
         <PageHeading
           eyebrow="YOUR PRACTICE, AT A GLANCE"
           title="A clearer picture of patient care."
@@ -63,8 +76,8 @@ export default function GlobalClinicianDashboard() {
         <div className="tc-metrics">
           <MetricCard
             label="Patients in your record"
-            value={MOCK_PATIENTS.length}
-            detail="Sample patient population"
+            value={rows.length}
+            detail="Authorized patient population"
             icon={Users}
           />
           <MetricCard
@@ -77,7 +90,7 @@ export default function GlobalClinicianDashboard() {
           <MetricCard
             label="New lab results"
             value={
-              MOCK_PATIENTS.filter((p) => p.status === "NEW LAB RESULT").length
+              rows.filter((p) => p.status === "NEW LAB RESULT").length
             }
             detail="Patients with a new-result flag"
             icon={FileText}
@@ -86,7 +99,7 @@ export default function GlobalClinicianDashboard() {
           <MetricCard
             label="Follow-up requested"
             value={
-              MOCK_PATIENTS.filter((p) => p.status === "FOLLOW-UP REQUESTED")
+              rows.filter((p) => p.status === "FOLLOW-UP REQUESTED")
                 .length
             }
             detail="Requests in the current record"
@@ -115,7 +128,7 @@ export default function GlobalClinicianDashboard() {
         </div>
         <Panel
           title="Your patients"
-          subtitle={`${patients.length} of ${MOCK_PATIENTS.length} records`}
+          subtitle={`${patients.length} of ${rows.length} records`}
           action={
             <div className="tc-toolbar">
               <label className="tc-search">
@@ -128,6 +141,9 @@ export default function GlobalClinicianDashboard() {
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </label>
+              <select className="tc-input" aria-label="Sort patients" value={sort} onChange={e=>chooseSort(e.target.value)}>
+                <option value="appointment">Upcoming appointment</option><option value="lab">Latest blood test</option><option value="oldest">Oldest blood test / no result</option><option value="name">Patient name</option>
+              </select>
               <select
                 className="tc-input"
                 aria-label="Filter patients by status"
@@ -205,7 +221,7 @@ export default function GlobalClinicianDashboard() {
                         <span>
                           <strong>{p.name}</strong>
                           <small>
-                            {p.age} years · {p.sex}
+                            {p.age} · {p.sex}
                           </small>
                         </span>
                       </Link>
@@ -213,7 +229,7 @@ export default function GlobalClinicianDashboard() {
                     <td>{p.condition}</td>
                     <td>
                       <strong>{p.latestTSH}</strong>{" "}
-                      <span className="tc-muted">mIU/L</span>
+                      <span className="tc-muted">{p.unit}</span>
                       <small>{p.trend}</small>
                     </td>
                     <td>

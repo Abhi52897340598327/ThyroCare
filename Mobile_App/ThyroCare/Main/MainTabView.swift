@@ -14,7 +14,11 @@ struct MainTabView: View {
                 VerifiedUserPage { selectedTab = .dashboard }
             }
             Tab("Questionnaire", systemImage: Constants.questionaireImage, value: AppTab.MainTab.questionaire) {
-                NavigationStack { QuestionairePage() }
+                NavigationStack {
+                    QuestionairePage(store: store, onGoToDashboard: {
+                        selectedTab = .dashboard
+                    })
+                }
             }
             Tab(Constants.summaryString, systemImage: Constants.summaryImage, value: AppTab.MainTab.summary) {
                 SummaryPage()
@@ -23,13 +27,15 @@ struct MainTabView: View {
                 DashboardPage { Task { await store.logout() } }
             }
             Tab(Constants.predictionString, systemImage: Constants.diagnosisImage, value: AppTab.MainTab.prediction) {
-                PredictionPage()
+                PredictionPage {
+                    selectedTab = .dashboard
+                }
             }
             Tab(Constants.medicationString, systemImage: Constants.medicationImage, value: AppTab.MainTab.medication) {
-                MedicationLogPage()
+                NavigationStack { MedicationLogPage(store: store) }
             }
             Tab(Constants.pictureString, systemImage: Constants.pictureImage, value: AppTab.MainTab.picture) {
-                NavigationStack { PicturePage() }
+                NavigationStack { PicturePage(store: store) }
             }
         }
         .environmentObject(presentationIdentity)
@@ -51,7 +57,12 @@ struct MainTabView: View {
         }
         .sheet(isPresented: $showingRecords) { CareTabs(store: store) }
         .sheet(isPresented: Binding(get: { store.showQuestionnaire }, set: { store.showQuestionnaire = $0 })) {
-            NavigationStack { QuestionairePage() }
+            NavigationStack {
+                QuestionairePage(store: store, onGoToDashboard: {
+                    store.showQuestionnaire = false
+                    selectedTab = .dashboard
+                })
+            }
         }
         .onAppear { presentationIdentity.userName = store.session?.user.name ?? "" }
     }

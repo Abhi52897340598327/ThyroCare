@@ -53,6 +53,7 @@ private struct PatientCache: Codable {
 
 @MainActor @Observable
 final class CareStore {
+    var isRestoring = true
     var showQuestionnaire = false
     var session: PatientSession?
     var records: [PatientRecord] = []
@@ -112,18 +113,33 @@ final class CareStore {
     }
 
     func restore() async {
+        guard isRestoring else { return }
+        defer { isRestoring = false }
         let requestGeneration = generation
         do {
             guard let data = try keychainRead() else { return }
             let stored = try JSONDecoder().decode(PatientSession.self, from: data)
-            // A cached token is not proof of a currently valid server session.
+            // Restore protected local continuity first; server requests still require a valid token.
+            session = stored
+            try loadCache()
+            syncLabel = "Saved on device · Checking connection"
+            isRestoring = false
             let user: PatientIdentity = try await request("me", token: stored.token)
             guard generation == requestGeneration else { return }
             session = PatientSession(token: stored.token, user: user)
-            try loadCache()
             await synchronize()
+        } catch CareClientError.sessionExpired {
+            guard generation == requestGeneration else { return }
+            session = nil
+            records = []
+            pending = []
+            reminders.cancelForLogout()
+            errorMessage = "The server has expired or revoked this login. Your saved records are retained; sign in to reconnect."
         } catch {
-            if generation == requestGeneration { errorMessage = "Connect and sign in to verify your session. Saved device records are retained." }
+            guard generation == requestGeneration else { return }
+            // A temporary outage must not erase a saved login or protected local records.
+            syncLabel = "Saved on device · Waiting to reconnect"
+            errorMessage = "Could not connect to verify cloud access. Your saved account and device records are retained."
         }
     }
 
@@ -211,6 +227,26 @@ final class CareStore {
             if let previous = exportURL { try? FileManager.default.removeItem(at: previous) }
             exportURL = url
         } catch { errorMessage = error.localizedDescription }
+    }
+
+    func analyzeMeal(_ record: PatientRecord) async throws -> PatientRecord {
+        guard let session, session.user.id == record.patientID else {
+            throw CareClientError.message("Sign in as the patient to authorize analysis.")
+        }
+        if pending.contains(where: { $0.id == record.id && $0.kind == "meals" }) {
+            await synchronize()
+            guard !pending.contains(where: { $0.id == record.id && $0.kind == "meals" }) else {
+                throw CareClientError.message("Your meal photo is still waiting to sync. Retry synchronization before analyzing it.")
+            }
+        }
+        let currentGeneration = generation
+        let body = try JSONEncoder().encode(["consent": true])
+        let result: PatientRecord = try await request("patients/\(record.patientID)/meals/\(record.id)/analyze", method: "POST", body: body, token: session.token)
+        guard generation == currentGeneration else { throw CancellationError() }
+        records.removeAll { $0.id == result.id && $0.kind == "meals" }
+        records.append(result)
+        try persistCache()
+        return result
     }
 
     func requestAccountDeletion() async {
@@ -301,7 +337,7 @@ final class CareStore {
         var request = URLRequest(url: baseURL.appending(path: "v1/" + path))
         request.httpMethod = method
         request.httpBody = body
-        request.timeoutInterval = 30
+        request.timeoutInterval = path.hasSuffix("/analyze") ? 120 : 30
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let token { request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization") }
         let data: Data
@@ -311,8 +347,18 @@ final class CareStore {
         } catch let error as URLError where baseURL.host == "localhost" {
             throw CareClientError.message("The local ThyroCare backend is not reachable. On your Mac, run bash Scripts/start_simulator_backend.sh and keep that terminal open, then retry. (" + error.localizedDescription + ")")
         }
+        if let response = response as? HTTPURLResponse, response.statusCode == 401, token != nil {
+            throw CareClientError.sessionExpired
+        }
         if let response = response as? HTTPURLResponse, response.statusCode == 404, path.hasPrefix("auth/") {
             throw CareClientError.message("Account service is unavailable on the configured server. The server needs the current ThyroCare backend before you can create an account or sign in. Your account details have not been saved.")
+        }
+        if let response = response as? HTTPURLResponse, response.statusCode == 404, path.hasSuffix("/analyze") {
+            struct AnalysisError: Decodable { let reason: String }
+            let reason = (try? JSONDecoder().decode(AnalysisError.self, from: data))?.reason
+            if reason == nil || reason?.lowercased() == "not found" {
+                throw CareClientError.message("The meal-analysis endpoint is missing on this server. Update the ThyroCare backend at \(baseURL.host ?? "the configured address"). Your saved meal has not been deleted.")
+            }
         }
         guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode) else {
             struct ServerError: Decodable { let reason: String }
@@ -357,7 +403,11 @@ final class CareStore {
     private func saveSession(_ session: PatientSession) throws {
         let data = try JSONEncoder().encode(session)
         let query = keychainQuery()
-        SecItemDelete(query as CFDictionary)
+        let updateStatus = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+        if updateStatus == errSecSuccess { return }
+        guard updateStatus == errSecItemNotFound else {
+            throw CareClientError.message("Could not securely update your session. Your previous login is retained.")
+        }
         var item = query
         item[kSecValueData as String] = data
         item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
@@ -378,7 +428,11 @@ final class CareStore {
 
 enum CareClientError: LocalizedError {
     case message(String)
+    case sessionExpired
     var errorDescription: String? {
-        switch self { case .message(let text): text }
+        switch self {
+        case .message(let text): text
+        case .sessionExpired: "Your server session has expired or been revoked. Saved device records are retained."
+        }
     }
 }

@@ -1,13 +1,14 @@
 import SwiftUI
 
 struct LoginPage: View {
+    var store: CareStore?
 
     @State private var username = ""
     @State private var password = ""
     
     @EnvironmentObject private var authManager: AuthManager
     private var startString: String {
-        authManager.accountExists(username: username) ? Constants.welcomeBackString : Constants.loginString
+        Constants.loginString
     }
 
     var body: some View {
@@ -25,7 +26,10 @@ struct LoginPage: View {
                     .foregroundStyle(.black)
 
                 VStack(spacing: 18) {
-                    OpenTextField(title: Constants.usernameString, text: $username)
+                    OpenTextField(title: store == nil ? Constants.usernameString : Constants.emailString, text: $username)
+                        .keyboardType(.emailAddress)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
 
                     SecureField(Constants.passwordString, text: $password)
                         .padding()
@@ -34,25 +38,28 @@ struct LoginPage: View {
                 }
                 .padding(.horizontal, 36)
 
-                if !authManager.accountMessage.isEmpty {
-                    Text(authManager.accountMessage)
+                if let message = store?.errorMessage, !message.isEmpty {
+                    Text(message)
                         .font(.footnote)
                         .foregroundStyle(.red)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 36)
                     NavigationLink("Sign Up") {
-                        SignUpPage()
+                        SignUpPage(store: store)
                     }
                     .foregroundStyle(.blue)
                 }
 
                 LandingButton(title: startString) {
-                    authManager.logIn(username: username, password: password)
+                    if let store {
+                        Task { await store.authenticate(email: username, password: password, name: "", register: false) }
+                    }
                 }
+                .disabled(store?.isWorking == true)
                 .padding(.horizontal, 36)
                 .padding(.top, 12)
-                NavigationLink("Forgot Password") {
-                    ForgotPasswordPage()
+                Button("Forgot Password") {
+                    store?.errorMessage = "Password recovery is not yet connected. Contact support for account assistance."
                 }
                 .foregroundStyle(.blue)
 

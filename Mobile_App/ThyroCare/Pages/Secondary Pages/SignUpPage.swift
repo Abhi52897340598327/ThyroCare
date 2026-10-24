@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SignUpPage: View {
+    var store: CareStore?
     @EnvironmentObject private var authManager: AuthManager
 
     @State private var username = ""
@@ -23,17 +24,24 @@ struct SignUpPage: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
 
                 OpenTextField(title: Constants.emailString, text: $email)
+                    .keyboardType(.emailAddress)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
 
-                if !authManager.accountMessage.isEmpty {
-                    Text(authManager.accountMessage)
+                if let message = store?.errorMessage, !message.isEmpty {
+                    Text(message)
                         .font(.footnote)
                         .foregroundStyle(ThyroUI.coral)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
                 }
 
+                Text("Use at least 12 characters for your password.").font(.footnote)
+
                 LandingButton(title: Constants.createAccountString) {
-                    authManager.signUp(username: username, email: email, password: password)
+                    if let store {
+                        Task { await store.authenticate(email: email, password: password, name: username, register: true) }
+                    }
                 }
             }
         }

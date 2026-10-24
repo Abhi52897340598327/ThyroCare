@@ -13,6 +13,12 @@ struct MealAnalysisService {
     static let shared = MealAnalysisService()
 
     private var baseURL: URL {
+        #if DEBUG && targetEnvironment(simulator)
+        if let configuredURL = Bundle.main.object(forInfoDictionaryKey: "ThyroCareSimulatorBackendBaseURL") as? String,
+           let url = URL(string: configuredURL) {
+            return url
+        }
+        #endif
         if let configuredURL = Bundle.main.object(forInfoDictionaryKey: "ThyroCareBackendBaseURL") as? String,
            let url = URL(string: configuredURL) {
             return url
@@ -36,6 +42,7 @@ struct MealAnalysisService {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = encodedBody
+        request.timeoutInterval = 120
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -91,7 +98,7 @@ struct MealAnalysisService {
         if let urlError = error as? URLError {
             switch urlError.code {
             case .cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet, .timedOut:
-                return "Could not reach the ThyroCare backend (https://thyrocare-9qfo.onrender.com). Please check your internet connection."
+                return "Could not reach the ThyroCare backend. Please check your internet connection."
             default:
                 return "Network error: \(urlError.localizedDescription)"
             }

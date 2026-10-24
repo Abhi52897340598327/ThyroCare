@@ -2,7 +2,9 @@ import SwiftUI
 
 struct PredictionPage: View {
     let result: ThyroSeverityResult
+    var onGoToDashboard: (() -> Void)? = nil
 
+    @State private var navigateToDashboard = false
     @State private var showDetails = false
     @AppStorage("severityScore") private var storedSeverityScore = 0
     @AppStorage("severityPercentile") private var storedSeverityPercentile = 0
@@ -10,12 +12,13 @@ struct PredictionPage: View {
     @AppStorage("t3Improvement") private var storedT3Improvement = 0
     @AppStorage("t4Improvement") private var storedT4Improvement = 0
 
-    init(result: ThyroSeverityResult? = nil) {
+    init(result: ThyroSeverityResult? = nil, onGoToDashboard: (() -> Void)? = nil) {
         if let result {
             self.result = result
         } else {
             self.result = ThyroSeverityResult.baseline
         }
+        self.onGoToDashboard = onGoToDashboard
     }
 
     private var displayedResult: ThyroSeverityResult {
@@ -115,17 +118,24 @@ struct PredictionPage: View {
             }
 
             VStack(spacing: 14) {
-                LandingButton(title: "Lets Go!") {
-                    withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
-                        showDetails.toggle()
+                LandingButton(title: Constants.proceduralString) {
+                    if let onGoToDashboard {
+                        onGoToDashboard()
+                    } else {
+                        navigateToDashboard = true
                     }
                 }
 
                 Button("Thanks but no") {
-                    showDetails = false
+                    withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
+                        showDetails.toggle()
+                    }
                 }
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
+            }
+            .navigationDestination(isPresented: $navigateToDashboard) {
+                DashboardPage()
             }
 
             if showDetails {
@@ -165,5 +175,8 @@ struct PredictionPage: View {
 }
 
 #Preview {
-    PredictionPage()
+    NavigationStack {
+        PredictionPage()
+            .environmentObject(AuthManager())
+    }
 }

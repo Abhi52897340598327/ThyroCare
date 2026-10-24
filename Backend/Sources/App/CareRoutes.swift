@@ -11,10 +11,7 @@ struct RetiredClinicalAPIs: AsyncMiddleware {
            origin != Environment.get("CARE_WEB_ORIGIN") && origin != "https://" + (request.headers.first(name: .host) ?? "") && origin != "http://localhost:3000" {
             throw Abort(.forbidden, reason: "Untrusted request origin.")
         }
-        let retired = ["/auth", "/patients", "/analyses", "/analyze-meal", "/debug", "/dashboard", "/reports", "/family-links", "/meal-uploads", "/providers/endocrinologists", "/clinician/review-events"]
-        if retired.contains(where: { path == $0 || path.hasPrefix($0 + "/") }) || path == "/clinician/patients" {
-            throw Abort(.gone, reason: "This prototype endpoint is retired. Use authenticated /v1 records.")
-        }
+
         let response = try await next.respond(to: request)
         if path.hasPrefix("/v1/") { response.headers.replaceOrAdd(name: .cacheControl, value: "no-store") }
         return response
@@ -32,7 +29,7 @@ func registerCareRoutes(_ app: Application) throws {
     }
     @Sendable func sessionResponse(_ session: CareSession, req: Request) async throws -> Response {
         let response = try await session.encodeResponse(for: req)
-        response.cookies["care_session"] = .init(string: session.token, maxAge: 43_200, path: "/v1", isSecure: req.application.environment == .production, isHTTPOnly: true, sameSite: .strict)
+        response.cookies["care_session"] = .init(string: session.token, maxAge: session.user.role == "patient" ? 2_592_000 : 43_200, path: "/v1", isSecure: req.application.environment == .production, isHTTPOnly: true, sameSite: .strict)
         return response
     }
     api.post("auth", "register") { req async throws -> Response in

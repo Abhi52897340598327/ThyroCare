@@ -26,15 +26,18 @@ struct CareSection<Content: View>: View {
 
 struct CareRootView: View {
     @State private var store = CareStore()
+    @StateObject private var presentationIdentity = AuthManager()
     var body: some View {
         Group {
-            if store.session != nil {
+            if store.isRestoring {
+                ProgressView("Restoring your account…")
+            } else if store.session != nil {
                 MainTabView(store: store)
             } else {
-                CareAccountView(store: store)
+                LandingPage(store: store)
+                    .environmentObject(presentationIdentity)
             }
         }
-        .tint(CarePalette.action)
         .task { await store.restore() }
     }
 }
@@ -119,7 +122,7 @@ struct CareTabs: View {
             }
         }
         .sheet(isPresented: Binding(get: { store.showQuestionnaire }, set: { store.showQuestionnaire = $0 })) {
-            NavigationStack { QuestionairePage() }
+            NavigationStack { QuestionairePage(store: store) }
         }
         .sheet(item: $notificationRouter.route) { route in
             CareReminderDestination(store: store, route: route)
@@ -141,7 +144,7 @@ struct CareTodayView: View {
                 Text(Date.now.formatted(date: .complete, time: .omitted)).foregroundStyle(.secondary)
                 CareSyncView(store: store)
                 CareSection(title: "Your questionnaire") {
-                    NavigationLink("Open questionnaire") { QuestionairePage() }
+                    NavigationLink("Open questionnaire") { QuestionairePage(store: store) }
                     NavigationLink("Explore simulated records") { CareSampleDataView() }
                 }
                 CareSection(title: "Today’s plan") {
@@ -200,7 +203,7 @@ struct CareTrackView: View {
     var body: some View {
         List {
             Section("Getting started") {
-                NavigationLink("Questionnaire") { QuestionairePage() }
+                NavigationLink("Questionnaire") { QuestionairePage(store: store) }
                 NavigationLink("Simulated sample data") { CareSampleDataView() }
             }
             Section("Record types") {
@@ -284,8 +287,35 @@ struct CareRecordList: View {
 struct CareRecordDetail: View {
     let store: CareStore
     let record: PatientRecord
+    @State private var analysisBusy = false
+    @State private var analysisMessage: String?
+    @State private var confirmAnalysis = false
     var body: some View {
         List {
+            if record.kind == "meals" {
+                Section("Meal analysis") {
+                    Button(analysisBusy ? "Analyzing meal…" : "Analyze meal with AI") { confirmAnalysis = true }
+                        .disabled(analysisBusy)
+                    if let analysisMessage { Text(analysisMessage) }
+                }
+                .alert("Analyze this photo?", isPresented: $confirmAnalysis) {
+                    Button("Cancel", role: .cancel) { }
+                    Button("Share photo and analyze") {
+                        Task {
+                            analysisBusy = true
+                            defer { analysisBusy = false }
+                            do {
+                                let result = try await store.analyzeMeal(record)
+                                analysisMessage = result.fields["analysisStatus"] == "complete"
+                                    ? (result.fields["summary"] ?? "Analysis saved.") + "\nEstimated kcal: " + (result.fields["estimatedCaloriesKcal"] ?? "Not available")
+                                    : result.fields["analysisError"]
+                            } catch { analysisMessage = error.localizedDescription }
+                        }
+                    }
+                } message: {
+                    Text("Your meal photo will be sent to Google Gemini to identify foods. Food search terms are sent to USDA for nutrient estimates. Your name and other health records are not included. You can cancel and log manually.")
+                }
+            }
             if record.kind == "meals", record.fields["hasPhoto"] == "true" {
                 Section("Confirmed meal photo") { CareMealPhotoView(store: store, record: record) }
             }

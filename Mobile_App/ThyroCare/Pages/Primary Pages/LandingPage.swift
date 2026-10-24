@@ -8,12 +8,14 @@
 import SwiftUI
 
 struct LandingPage: View {
+    var store: CareStore?
     let onAuthenticated: () -> Void
 
     @State private var showingLogin = false
     @State private var showingSignUp = false
 
-    init(onAuthenticated: @escaping () -> Void = {}) {
+    init(store: CareStore? = nil, onAuthenticated: @escaping () -> Void = {}) {
+        self.store = store
         self.onAuthenticated = onAuthenticated
     }
 
@@ -50,10 +52,10 @@ struct LandingPage: View {
                 }
             }
             .navigationDestination(isPresented: $showingLogin) {
-                LoginPage()
+                LoginPage(store: store)
             }
             .navigationDestination(isPresented: $showingSignUp) {
-                SignUpPage()
+                SignUpPage(store: store)
             }
         }
     }

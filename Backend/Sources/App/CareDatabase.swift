@@ -44,7 +44,7 @@ actor CareDatabase {
         // 256 random bits from the operating system-backed Swift system generator.
         var generator = SystemRandomNumberGenerator()
         let token = (0..<32).map { _ in String(format: "%02x", UInt8.random(in: .min ... .max, using: &generator)) }.joined()
-        try connection.execute("INSERT INTO sessions VALUES (?, ?, ?)", [Self.digest(token), identity.id, String(Date().addingTimeInterval(43_200).timeIntervalSince1970)])
+        try connection.execute("INSERT INTO sessions VALUES (?, ?, ?)", [Self.digest(token), identity.id, String(Date().addingTimeInterval(identity.role == "patient" ? 2_592_000 : 43_200).timeIntervalSince1970)])
         return CareSession(token: token, user: identity)
     }
 

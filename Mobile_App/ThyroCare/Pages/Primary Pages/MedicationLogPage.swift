@@ -2,6 +2,8 @@ import Charts
 import SwiftUI
 
 struct MedicationLogPage: View {
+    var store: CareStore?
+    @State private var showingModelLimit = false
     @State private var demographicProfile = DemographicProfile(
         age: 35,
         biologicalSex: .female,
@@ -46,25 +48,17 @@ struct MedicationLogPage: View {
         ThyroCard {
             ThyroSectionTitle("Medication log", subtitle: "Log thyroid medication exposure before running the model.")
 
-            ForEach(medicationLog) { medication in
-                MedicationLogRow(
-                    medication: bindingForMedication(id: medication.id),
-                    canDelete: medicationLog.count > 1,
-                    onDelete: {
-                        safelyDeleteMedication(id: medication.id)
+            if let store {
+                QuestionnaireRecordFields(store: store, kind: "medications", title: "Add medication", defaults: ["doseMode": "unknown", "unit": "mcg"])
+                ForEach(store.entries("medications")) { record in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(record.title).font(.headline)
+                        Text(record.fields["doseMode"] == "range" ? "Patient-estimated range: \(record.fields["doseLower"] ?? "")–\(record.fields["doseUpper"] ?? "") \(record.fields["unit"] ?? "")" : record.fields["doseMode"] == "exact" ? "\(record.fields["doseLower"] ?? "") \(record.fields["unit"] ?? "")" : "Dose not confirmed")
+                        Text(record.fields["schedule"] ?? "Schedule unknown").font(.subheadline)
                     }
-                )
+                }
+                NavigationLink("Medication reminders") { CareReminderCenter(store: store) }
             }
-
-            Button {
-                medicationLog.append(Self.defaultMedication)
-                projection = nil
-            } label: {
-                Label("Add medication", systemImage: "plus.circle.fill")
-                    .font(.subheadline.weight(.semibold))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(ThyroUI.teal)
         }
     }
 
@@ -140,14 +134,12 @@ struct MedicationLogPage: View {
     }
 
     private var analyzeSection: some View {
-        LandingButton(title: "Analyze Effects") {
-            withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
-                projection = MedicationTSHPredictor.analyze(
-                    medications: medicationLog,
-                    demographicProfile: demographicProfile
-                )
+        LandingButton(title: "Review medication effects") { showingModelLimit = true }
+            .alert("Medication review", isPresented: $showingModelLimit) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Individual medication-to-hormone forecasting is not validated. Amiodarone and lithium are recorded separately from thyroid replacement. Estimated dose ranges remain uncertain; confirm your regimen with your clinician.")
             }
-        }
     }
 
     private func projectionSection(_ projection: MedicationTSHProjection) -> some View {

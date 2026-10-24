@@ -1,6 +1,12 @@
 import SwiftUI
 
 struct QuestionairePage: View {
+    var store: CareStore?
+    var onSubmitted: ((ThyroSeverityResult) -> Void)? = nil
+    var onGoToDashboard: (() -> Void)? = nil
+    @State private var saveMessage: String?
+    @State private var savingContext = false
+    @State private var restoredContext = false
     @State private var agreedToTerms = false
     @State private var confirmedAge = false
     @State private var age = 18
@@ -50,11 +56,11 @@ struct QuestionairePage: View {
     private let frequencies = ["Daily", "Weekly", "Biweekly", "Monthly"]
 
     var body: some View {
-        ThyroPageScaffold(title: "Questionaire") {
+        ThyroPageScaffold(title: "Questionnaire") {
             ThyroCard {
                 ThyroSectionTitle("Before we start", subtitle: "Review the study terms and confirm eligibility.")
 
-                Text("ThyroCare estimates thyroid risk from lab values, medication timing, treatment history, and diet habits. It does not replace medical advice.")
+                Text("Keep your measured labs, medicines and context together for review. Saving records does not calculate a diagnosis or treatment response.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
@@ -65,7 +71,7 @@ struct QuestionairePage: View {
             }
 
             ThyroCard {
-                ThyroSectionTitle("Labs", subtitle: "Please enter your age, biological sex, and most recent TSH, T3, and T4 levels.")
+                ThyroSectionTitle("Labs", subtitle: "Enter only tests actually measured. Each result retains its dates, units and intervals.")
 
                 OpenTextField(title: "Age", text: $age)
 
@@ -79,10 +85,17 @@ struct QuestionairePage: View {
                 .background(ThyroUI.softGray)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
 
-                HStack(spacing: 10) {
-                    OpenTextField(title: "TSH", text: $tsh)
-                    OpenTextField(title: "T3", text: $t3)
-                    OpenTextField(title: "T4", text: $t4)
+                if let store {
+                    ForEach(CareField.analytes, id: \.self) { analyte in
+                        QuestionnaireRecordFields(store: store, kind: "labs", title: analyte, defaults: ["analyte": analyte, "unit": CareField.units[analyte]?.first ?? ""])
+                    }
+                    DisclosureGroup("Weight, BMI and recent vitals · optional") {
+                        QuestionnaireRecordFields(store: store, kind: "vitals", title: "Current weight", defaults: ["type": "weight", "unit": "kg"])
+                        QuestionnaireRecordFields(store: store, kind: "vitals", title: "Height", defaults: ["type": "height", "unit": "cm"])
+                        QuestionnaireRecordFields(store: store, kind: "vitals", title: "BMI (entered)", defaults: ["type": "BMI", "unit": "kg/m²"])
+                        QuestionnaireRecordFields(store: store, kind: "vitals", title: "Blood pressure", defaults: ["type": "bloodPressure", "unit": "mmHg"])
+                        QuestionnaireRecordFields(store: store, kind: "vitals", title: "Measured heart rate", defaults: ["type": "heartRate", "unit": "bpm"])
+                    }
                 }
             }
 
@@ -107,14 +120,14 @@ struct QuestionairePage: View {
                 conditionPicker(title: "Lithium?", selection: $lithium)
 
                 if lithium == "Yes" {
-                    OpenTextField(title: "Lithium dosage", text: $lithiumDose)
+                    if let store { QuestionnaireRecordFields(store: store, kind: "medications", title: "Lithium", defaults: ["name": "Lithium", "unit": "mg", "doseMode": "unknown"]) }
                 }
 
                 conditionPicker(title: "Tumor?", selection: $tumor)
             }
 
             ThyroCard {
-                ThyroSectionTitle("Medication", subtitle: "Are you on Levothyroxine or antithyroid medication, and what is your exact dose?")
+                ThyroSectionTitle("Medication", subtitle: "Record thyroid medicines, amiodarone and other prescriptions, including uncertain doses.")
 
                 HStack {
                     Button { onMedication = true } label: {
@@ -127,7 +140,9 @@ struct QuestionairePage: View {
                 .buttonStyle(.plain)
 
                 if onMedication {
-                    OpenTextField(title: "Dosage in mg", text: $medicationDose)
+                    if let store {
+                        QuestionnaireRecordFields(store: store, kind: "medications", title: "Medicine or supplement", defaults: ["doseMode": "unknown", "unit": "mcg"])
+                    }
 
                     Picker("Frequency", selection: $frequency) {
                         ForEach(frequencies, id: \.self) { frequency in
@@ -170,23 +185,42 @@ struct QuestionairePage: View {
             }
 
             ThyroCard {
-                ThyroSectionTitle("Medication timing", subtitle: "How long do you wait to eat after medication, and do you take iron or calcium?")
+                ThyroSectionTitle("Medication timing", subtitle: "How long do you wait to eat after medication, and do you take an iron supplement?")
 
                 OpenTextField(title: "Time in hours", text: $waitHours)
-                Toggle("I take iron or calcium", isOn: $takesIronCalcium)
+                Toggle("Do you take an iron supplement?", isOn: $takesIronCalcium)
                     .tint(ThyroUI.teal)
 
                 LandingButton(title: "Submit") {
                     submitQuestionaire()
+                    Task { await saveQuestionnaireContext() }
                 }
-                .disabled(!agreedToTerms || !confirmedAge)
+                .disabled(!agreedToTerms || !confirmedAge || savingContext)
                 .opacity(agreedToTerms && confirmedAge ? 1 : 0.55)
-                .navigationDestination(isPresented: $shouldShowPrediction) {
-                    PredictionPage(result: submittedResult)
-                }
+                if let saveMessage { Text(saveMessage).font(.footnote).foregroundStyle(.secondary) }
+                Text("Calcium and biotin can be recorded separately under medicines and supplements.").font(.footnote)
             }
         }
-        .onAppear(perform: applyMealHistoryDietIfAvailable)
+        .onAppear {
+            applyMealHistoryDietIfAvailable()
+            guard !restoredContext, let fields = store?.questionnaireRecord?.fields else { return }
+            restoredContext = true
+            age = Int(fields["age"] ?? "") ?? age
+            sex = fields["sex"] ?? sex
+            hadTreatment = fields["treatmentHistory"] == "yes"
+            pregnant = fields["pregnancyContext"] ?? pregnant
+            lithium = fields["lithiumReported"] ?? lithium
+            tumor = fields["tumorReported"] ?? tumor
+            takesIronCalcium = fields["ironSupplement"] == "yes"
+            waitHours = fields["foodWaitHours"] ?? waitHours
+            onMedication = store?.entries("medications").isEmpty == false
+        }
+        .navigationDestination(isPresented: $shouldShowPrediction) {
+            PredictionPage(result: submittedResult) {
+                shouldShowPrediction = false
+                onGoToDashboard?()
+            }
+        }
     }
 
     private func conditionPicker(title: String, selection: Binding<String>) -> some View {
@@ -327,12 +361,32 @@ struct QuestionairePage: View {
     }
 
     private var patientProfile: ThyroPatientProfile {
-        ThyroPatientProfile(
+        var resolvedTSH = tsh.numberValue
+        var resolvedT3 = t3.numberValue
+        var resolvedT4 = t4.numberValue
+
+        if let store {
+            for entry in store.entries("labs") {
+                let analyte = entry.fields["analyte"]?.lowercased() ?? ""
+                let val = Double(entry.fields["value"] ?? "") ?? 0
+                if val > 0 {
+                    if analyte == "tsh" && resolvedTSH == 0 {
+                        resolvedTSH = val
+                    } else if (analyte.contains("free t3") || analyte == "t3") && resolvedT3 == 0 {
+                        resolvedT3 = val
+                    } else if (analyte.contains("free t4") || analyte == "t4") && resolvedT4 == 0 {
+                        resolvedT4 = val
+                    }
+                }
+            }
+        }
+
+        return ThyroPatientProfile(
             age: age,
             sex: sex,
-            tsh: tsh.numberValue,
-            t3: t3.numberValue,
-            t4: t4.numberValue,
+            tsh: resolvedTSH,
+            t3: resolvedT3,
+            t4: resolvedT4,
             hadTreatment: hadTreatment,
             isPregnant: pregnant == "Yes",
             takesLithium: lithium == "Yes",
@@ -353,6 +407,16 @@ struct QuestionairePage: View {
         )
     }
 
+    private func saveQuestionnaireContext() async {
+        guard let store else { saveMessage = "Sign in to save your questionnaire."; return }
+        savingContext = true
+        defer { savingContext = false }
+        let fields = ["step": "4", "status": "complete", "age": String(age), "sex": sex, "treatmentHistory": hadTreatment ? "yes" : "no", "pregnancyContext": pregnant, "lithiumReported": lithium, "tumorReported": tumor, "ironSupplement": takesIronCalcium ? "yes" : "no", "foodWaitHours": waitHours, "source": "Patient-reported questionnaire"]
+        if await store.save(kind: "questionnaire", fields: fields, correcting: store.questionnaireRecord) {
+            saveMessage = store.pending.contains { $0.kind == "questionnaire" } ? "Saved on device; waiting to sync." : "Questionnaire synchronized with your patient record."
+        } else { saveMessage = store.errorMessage }
+    }
+
     private func submitQuestionaire() {
         guard agreedToTerms && confirmedAge else { return }
 
@@ -364,6 +428,7 @@ struct QuestionairePage: View {
         storedT3Improvement = result.t3Improvement
         storedT4Improvement = result.t4Improvement
         shouldShowPrediction = true
+        onSubmitted?(result)
     }
 }
 
