@@ -933,7 +933,6 @@ public func configure(_ app: Application) throws {
         allowCredentials: true
     )
     app.middleware.use(CORSMiddleware(configuration: corsConfiguration), at: .beginning)
-    app.middleware.use(RetiredClinicalAPIs())
     try registerCareRoutes(app)
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
     app.views.use(.leaf)

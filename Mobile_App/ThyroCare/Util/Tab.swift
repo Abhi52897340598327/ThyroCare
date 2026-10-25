@@ -16,5 +16,6 @@ struct AppTab {
         case prediction
         case medication
         case picture
+        case messages
     }
 }

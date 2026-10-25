@@ -22,6 +22,8 @@ import {
   Utensils,
   X,
 } from "lucide-react";
+import ClinicianMessagePopup from "./ClinicianMessagePopup";
+
 const familyNavigation = [
   { href: "/family", label: "Overview", icon: LayoutDashboard },
   { href: "/family/reports", label: "Reports", icon: FileText },
@@ -265,6 +267,7 @@ export default function DashboardShell({
         <main id="dashboard-content" tabIndex={-1} className="tc-content">
           {children}
         </main>
+        {mode === "clinician" && <ClinicianMessagePopup />}
         <footer className="tc-footer">
           <span>ThyroCare · Care, connected.</span>
           <span>Sample records for this dashboard preview</span>

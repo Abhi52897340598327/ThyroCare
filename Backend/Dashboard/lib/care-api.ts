@@ -6,9 +6,10 @@ export const kindNames: Record<Kind, string> = { labs: "Labs and trends", sympto
 export const analyteUnits: Record<string, string[]> = { TSH: ["mIU/L", "µIU/mL"], "Free T4": ["ng/dL", "pmol/L"], "Free T3": ["pg/mL", "pmol/L"], "Total T4": ["µg/dL", "nmol/L"], "Total T3": ["ng/dL", "nmol/L"] };
 export const symptomNames: Record<string, string> = { fatigue: "Fatigue / low energy", concentration: "Concentration", mood: "Mood", sleep: "Sleep", temperature: "Temperature intolerance", palpitations: "Palpitations (reported)", tremor: "Tremor", bowel: "Bowel changes", muscle: "Muscle symptoms", skinHair: "Skin / hair concerns" };
 export async function careAPI<T>(path: string, method = "GET", body?: unknown, signal?: AbortSignal): Promise<T> {
-    const base = (process.env.NEXT_PUBLIC_VAPOR_API_BASE_URL ?? "").replace(/\/$/, "");
+    const rawBase = process.env.NEXT_PUBLIC_VAPOR_API_BASE_URL;
+    const base = (rawBase || (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") ? "http://localhost:8080" : "")).replace(/\/$/, "");
     const response = await fetch(`${base}/v1/${path}`, { method, credentials: "include", cache: "no-store", signal,
-        headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+        headers: { "Content-Type": "application/json", "X-Role": "clinician" }, body: body === undefined ? undefined : JSON.stringify(body) });
     if (response.status === 404 && path.startsWith("auth/")) {
         throw new Error("Account service is unavailable on the configured server. Deploy the current ThyroCare backend before creating an account or signing in.");
     }

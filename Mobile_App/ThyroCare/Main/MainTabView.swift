@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Original dashboard and seven-tab presentation, with server-backed account ownership.
+/// Original dashboard and presentation, with server-backed account ownership.
 struct MainTabView: View {
     let store: CareStore
     @State private var selectedTab: AppTab.MainTab = .home
@@ -36,6 +36,9 @@ struct MainTabView: View {
             }
             Tab(Constants.pictureString, systemImage: Constants.pictureImage, value: AppTab.MainTab.picture) {
                 NavigationStack { PicturePage(store: store) }
+            }
+            Tab(Constants.messagesString, systemImage: Constants.messagesImage, value: AppTab.MainTab.messages) {
+                NavigationStack { MessageClinicianPage(store: store) }
             }
         }
         .environmentObject(presentationIdentity)

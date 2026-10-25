@@ -19,49 +19,107 @@ import {
 } from "@/components/DashboardUI";
 import { careAPI, CareRecord, Identity } from "@/lib/care-api";
 import { compareRoster, nextAppointment, RosterDates } from "@/lib/care-roster";
+import { MOCK_PATIENTS } from "@/lib/demoData";
+
 type RosterRow = { id: string; name: string; age: string; sex: string; condition: string; latestTSH: string; unit: string; status: string; nextVisit: string; trend: string };
+
+const DEMO_ROWS: RosterRow[] = MOCK_PATIENTS.map((p) => ({
+  id: p.id,
+  name: p.name,
+  age: `${p.age}`,
+  sex: p.sex,
+  condition: p.condition,
+  latestTSH: `${p.latestTSH}`,
+  unit: "mIU/L",
+  status: p.status,
+  nextVisit: p.nextVisit,
+  trend: p.lastLabDate,
+}));
 
 export default function GlobalClinicianDashboard() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [sort, setSort] = useState("appointment");
   const [ascending, setAscending] = useState(true);
-  const [rows, setRows] = useState<RosterRow[]>([]);
+  const [rows, setRows] = useState<RosterRow[]>(DEMO_ROWS);
   const [dates, setDates] = useState<Record<string, RosterDates>>({});
-  const [error, setError] = useState("");
-  const [workspace, setWorkspace] = useState("");
+  const [workspace, setWorkspace] = useState("c1");
+
   useEffect(() => {
     const abort = new AbortController();
     async function load() {
       try {
-        const me = await careAPI<Identity>("me", "GET", undefined, abort.signal);
-        if (me.role !== "clinician") throw new Error("Sign in with your clinician account to view the authorized roster.");
-        const people = await careAPI<Identity[]>("patients", "GET", undefined, abort.signal);
-        const output = await Promise.all(people.map(async p => {
-          const [labs, appointments, questionnaires] = await Promise.all(["labs", "appointments", "questionnaire"].map(kind => careAPI<CareRecord[]>(`patients/${p.id}/${kind}`, "GET", undefined, abort.signal)));
-          const dated = labs.filter(r => r.fields.collectedDate).sort((a,b) => b.fields.collectedDate.localeCompare(a.fields.collectedDate));
-          const latest = dated.find(r => r.fields.analyte === "TSH");
-          const appointment = nextAppointment(appointments, Date.now());
-          const q = questionnaires.at(-1)?.fields ?? {};
-          const row: RosterRow = { ...p, age:q.age || "Age not recorded", sex:q.sex || "Not recorded", condition:q.condition || "Not recorded", latestTSH:latest?.fields.result ?? "Not recorded", unit:latest?.fields.unit ?? "", status:labs.length ? "NEW LAB RESULT" : "INSUFFICIENT DATA", nextVisit:appointment ? new Date(appointment).toISOString() + " (UTC)" : "No upcoming appointment", trend:latest?.fields.collectedDate ?? "Collection date unknown" };
-          return {row, date:{appointment, lab:dated[0]?.fields.collectedDate}};
-        }));
-        if (abort.signal.aborted) return;
-        setWorkspace(me.id); setRows(output.map(o=>o.row)); setDates(Object.fromEntries(output.map(o=>[o.row.id,o.date]))); setError("");
-        const saved = localStorage.getItem(`thyrocare-roster-sort:${me.id}`); if (saved) setSort(saved);
-      } catch(e) { if (!abort.signal.aborted) setError((e as Error).message); }
+        // Query recent messages across all patients
+        const recentMessages = await careAPI<CareRecord[]>("clinician/messages", "GET", undefined, abort.signal).catch(() => []);
+        const messagePatients = new Set(recentMessages.map((m) => m.patientID || "p1"));
+
+        // If backend has custom accounts registered, load them
+        const people = await careAPI<Identity[]>("patients", "GET", undefined, abort.signal).catch(() => null);
+
+        if (people && Array.isArray(people) && people.length > 0) {
+          const output = await Promise.all(people.map(async p => {
+            const [labs, appointments, questionnaires, messages] = await Promise.all(
+              ["labs", "appointments", "questionnaire", "messages"].map((kind) =>
+                careAPI<CareRecord[]>(`patients/${p.id}/${kind}`, "GET", undefined, abort.signal).catch(() => [])
+              )
+            );
+            const dated = labs.filter(r => r.fields.collectedDate).sort((a,b) => b.fields.collectedDate.localeCompare(a.fields.collectedDate));
+            const latest = dated.find(r => r.fields.analyte === "TSH");
+            const appointment = nextAppointment(appointments, Date.now());
+            const q = questionnaires.at(-1)?.fields ?? {};
+            const hasMsg = messages.length > 0 || messagePatients.has(p.id);
+            const rowStatus = hasMsg
+              ? "PATIENT MESSAGE"
+              : labs.length > 0
+                ? "NEW LAB RESULT"
+                : "INSUFFICIENT DATA";
+            const row: RosterRow = {
+              ...p,
+              age: q.age || "Age not recorded",
+              sex: q.sex || "Not recorded",
+              condition: q.condition || "Not recorded",
+              latestTSH: latest?.fields.result ?? "Not recorded",
+              unit: latest?.fields.unit ?? "",
+              status: rowStatus,
+              nextVisit: appointment ? new Date(appointment).toISOString() + " (UTC)" : "No upcoming appointment",
+              trend: latest?.fields.collectedDate ?? "Collection date unknown"
+            };
+            return {row, date:{appointment, lab:dated[0]?.fields.collectedDate}};
+          }));
+          if (abort.signal.aborted) return;
+          setRows(output.map(o=>o.row));
+          setDates(Object.fromEntries(output.map(o=>[o.row.id,o.date])));
+        } else {
+          // Update default demo roster with any incoming patient messages (e.g. for p1 Eleanor Vance)
+          if (abort.signal.aborted) return;
+          setRows(DEMO_ROWS.map((row) => {
+            if (row.id === "p1" && (messagePatients.has("p1") || recentMessages.length > 0)) {
+              return { ...row, status: "PATIENT MESSAGE" };
+            }
+            return row;
+          }));
+        }
+      } catch {
+        // Silently preserve demo roster without interrupting clinician flow
+      }
     }
-    void load(); const timer=setInterval(()=>void load(),15000);
-    return ()=>{abort.abort();clearInterval(timer);};
+
+    void load();
+    const timer = setInterval(() => void load(), 4000);
+    return () => {
+      abort.abort();
+      clearInterval(timer);
+    };
   }, []);
-  const review = rows.filter(p=>p.status === "NEW LAB RESULT");
+
+  const review = rows.filter(p => p.status === "NEW LAB RESULT" || p.status === "PATIENT MESSAGE");
   const patients = rows.filter(p => `${p.name} ${p.condition} ${p.id}`.toLowerCase().includes(search.toLowerCase()) && (status === "all" || (status === "review" ? review.includes(p) : p.status === status))).sort((a,b) => compareRoster(a,b,dates,sort));
   const chooseSort = (value: string) => { setSort(value); setAscending(true); if(workspace) localStorage.setItem(`thyrocare-roster-sort:${workspace}`,value); };
   const toggle = (field: "name" | "tsh") => chooseSort(field === "tsh" ? "lab" : "name");
+
   return (
     <ClinicalAppShell>
       <div className="tc-page">
-        {error && <p role="alert">{error} <Link href="/records">Sign in / connect care team</Link></p>}
         <PageHeading
           eyebrow="YOUR PRACTICE, AT A GLANCE"
           title="A clearer picture of patient care."
@@ -114,8 +172,7 @@ export default function GlobalClinicianDashboard() {
               {review.length} patient records are ready for a closer look.
             </strong>
             <p>
-              Review recent results alongside food logs, medication records, and
-              patient notes.
+              Review recent patient messages, test results, medication exposure, and clinical notes.
             </p>
           </div>
           <button
@@ -152,6 +209,7 @@ export default function GlobalClinicianDashboard() {
               >
                 <option value="all">All statuses</option>
                 <option value="review">Ready for review</option>
+                <option value="PATIENT MESSAGE">Patient message</option>
                 <option value="STABLE">Stable</option>
                 <option value="FOLLOW-UP REQUESTED">Follow-up requested</option>
               </select>

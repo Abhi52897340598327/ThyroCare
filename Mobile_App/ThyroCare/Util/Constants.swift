@@ -17,6 +17,7 @@ struct Constants {
     static let questionaireString = "Questionaire"
     static let dashboardString = "Dashboard"
     static let pictureString = "Food Analysis"
+    static let messagesString = "Messages"
     
     static let logoWidth : CGFloat = 260
     static let logoHeight : CGFloat = 260
@@ -29,6 +30,7 @@ struct Constants {
     static let questionaireImage = "list.bullet.clipboard"
     static let dashboardImage = "chart.line.uptrend.xyaxis"
     static let pictureImage = "camera"
+    static let messagesImage = "bubble.left.and.bubble.right.fill"
     static let profileImage = "person.circle.fill"
     
     static let loginString = "Log In"
@@ -49,6 +51,3 @@ struct Constants {
     static let forgotPasswordInstructions = "Please enter your email down below to change your password. You will recieve a verification code in the email."
     static let verificationPageInstructions = "Enter the verification code you recieved in the email"
 }
-
-
-
