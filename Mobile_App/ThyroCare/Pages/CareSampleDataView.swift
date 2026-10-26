@@ -1,4 +1,5 @@
 import SwiftUI
+import Charts
 
 /// Isolated, read-only fixtures. Never added to a CareStore's sync queue or patient account.
 struct CareSampleDataView: View {
@@ -48,5 +49,56 @@ struct CareSampleDataView: View {
             record("sample-medication", "medications", 10, ["name": "Levothyroxine", "doseMode": "unknown"]),
             record("sample-meal", "meals", 1, ["description": "Oatmeal with berries — example meal", "mealTime": "08:00"])
         ]
+    }
+}
+
+private struct LabPoint: Identifiable {
+    let id: String
+    let date: Date
+    let value: Double
+}
+
+private struct CareLabChart: View {
+    let records: [PatientRecord]
+    let unit: String
+    @State private var selectedDate: Date?
+
+    var points: [LabPoint] {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        return records.compactMap { record in
+            guard let text = record.fields["result"], let value = Double(text), value.isFinite,
+                  let dateText = record.fields["collectedDate"], let date = formatter.date(from: dateText) else { return nil }
+            return LabPoint(id: record.id, date: date, value: value)
+        }.sorted { $0.date < $1.date }
+    }
+
+    var body: some View {
+        Section("Measured results · \(unit)") {
+            if points.isEmpty {
+                Text("No exact results with collection dates to plot.")
+            } else {
+                Chart(points) { point in
+                    PointMark(x: .value("Collection date", point.date), y: .value(unit, point.value))
+                        .accessibilityLabel(point.date.formatted(date: .abbreviated, time: .omitted))
+                        .accessibilityValue("\(point.value) \(unit)")
+                }
+                .chartXSelection(value: $selectedDate)
+                .frame(height: 240)
+                if let selectedDate, let point = points.min(by: { abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate)) }) {
+                    Text("\(point.date.formatted(date: .abbreviated, time: .omitted)): \(point.value.formatted()) \(unit)")
+                        .monospacedDigit()
+                }
+            }
+            ForEach(records) { record in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(record.fields["result"] ?? "") \(unit) · \(record.observationDate)")
+                    Text("Report interval: \(record.fields["referenceLower"].flatMap { $0.isEmpty ? nil : $0 } ?? "Not supplied") – \(record.fields["referenceUpper"] ?? "")")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+        }
     }
 }

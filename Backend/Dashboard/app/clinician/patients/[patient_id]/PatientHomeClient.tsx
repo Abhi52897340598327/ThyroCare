@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useState, useCallback } from "react";
 import PatientWorkspaceLayout from "@/components/PatientWorkspaceLayout";
 import { getPatientById } from "@/lib/demoData";
+import { careAPI, CareRecord } from "@/lib/care-api";
 import Link from "next/link";
 import { 
   Activity, 
@@ -9,7 +11,12 @@ import {
   AlertTriangle, 
   Clock, 
   Calendar, 
-  ChevronRight
+  ChevronRight,
+  MessageSquare,
+  Send,
+  CheckCircle2,
+  User,
+  Stethoscope
 } from "lucide-react";
 
 export default function PatientHomeClient({
@@ -18,6 +25,55 @@ export default function PatientHomeClient({
   patientId: string;
 }) {
   const patient = getPatientById(patientId);
+
+  const [messages, setMessages] = useState<CareRecord[]>([]);
+  const [replyText, setReplyText] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const [replySuccess, setReplySuccess] = useState(false);
+
+  const fetchMessages = useCallback(async () => {
+    try {
+      const records = await careAPI<CareRecord[]>(`patients/${patientId}/messages`);
+      if (Array.isArray(records)) {
+        setMessages(records.sort((a, b) => (b.recordedAt || "").localeCompare(a.recordedAt || "")));
+      }
+    } catch {}
+  }, [patientId]);
+
+  useEffect(() => {
+    void fetchMessages();
+    const interval = setInterval(() => void fetchMessages(), 2500);
+    return () => clearInterval(interval);
+  }, [fetchMessages]);
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = replyText.trim();
+    if (!trimmed) return;
+    setIsSending(true);
+    try {
+      await careAPI(`patients/${patientId}/messages`, "POST", {
+        id: crypto.randomUUID(),
+        expectedVersion: 0,
+        fields: {
+          body: trimmed,
+          subject: "Clinician Response",
+          sender: "Dr. Jane Smith (Endocrinology)",
+          authorRole: "clinician",
+          recipient: patient.name,
+          observedDate: new Date().toISOString(),
+        },
+      });
+      setReplyText("");
+      setReplySuccess(true);
+      setTimeout(() => setReplySuccess(false), 3000);
+      await fetchMessages();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   return (
     <PatientWorkspaceLayout patientId={patientId}>
@@ -98,44 +154,42 @@ export default function PatientHomeClient({
                 {patient.labs.slice().reverse().map((lab) => (
                   <div key={lab.id} className="flex flex-col items-center group relative">
                     <div 
-                      className="w-3 h-3 rounded-full bg-teal-600 border-2 border-white shadow-xs group-hover:scale-125 transition-transform"
-                      style={{ marginBottom: `${(lab.tsh / 7) * 100}px` }}
-                    />
-                    <span className="text-[10px] font-bold text-slate-700">{lab.tsh}</span>
-                    <span className="text-[9px] text-slate-400">{lab.date.split(",")[0]}</span>
-
-                    {/* Tooltip */}
-                    <div className="absolute bottom-12 hidden group-hover:block bg-slate-900 text-white text-[10px] p-2 rounded shadow-md z-10 w-28 pointer-events-none">
-                      <p className="font-bold">{lab.date}</p>
-                      <p>TSH: {lab.tsh} mIU/L</p>
-                      <p>FT4: {lab.ft4} ng/dL</p>
+                      className="w-3 bg-teal-600 rounded-t hover:bg-teal-700 transition-all cursor-pointer relative"
+                      style={{ height: `${Math.min(100, (lab.tsh / 7.0) * 100)}%` }}
+                    >
+                      <div className="opacity-0 group-hover:opacity-100 absolute -top-8 left-1/2 transform -translate-x-1/2 bg-slate-900 text-white text-[9px] py-1 px-1.5 rounded whitespace-nowrap z-10 pointer-events-none transition-opacity">
+                        {lab.tsh} mIU/L
+                      </div>
                     </div>
+                    <span className="text-[9px] text-slate-500 mt-2 font-medium">{lab.date.split(" ")[0]}</span>
                   </div>
                 ))}
               </div>
 
               <div className="flex justify-between text-[10px] text-slate-400 border-t border-slate-200 pt-1">
-                <span>Earliest Lab</span>
-                <span>Latest Lab</span>
+                <span>Lower Reference: 0.4 mIU/L</span>
+                <span>0.0 mIU/L</span>
               </div>
             </div>
           </div>
 
-          {/* Clinical Review Events */}
+          {/* Active Review Events */}
           <div className="bg-white rounded-lg border border-slate-200 p-5 shadow-xs flex flex-col justify-between">
             <div>
               <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center space-x-2">
-                <AlertTriangle className="w-4 h-4 text-amber-600" />
-                <span>Clinical Review Events</span>
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                <span>Active Review Triggers</span>
               </h2>
 
-              <ul className="space-y-3 text-xs">
+              <ul className="space-y-3">
                 {patient.alerts.length > 0 ? (
                   patient.alerts.map((alert) => (
-                    <li key={alert.id} className="p-2.5 bg-amber-50/60 border border-amber-200 rounded text-amber-900 space-y-1">
-                      <div className="font-bold flex items-center justify-between">
-                        <span>{alert.title}</span>
-                        <span className="text-[9px] bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded">{alert.date}</span>
+                    <li key={alert.id} className="p-3 bg-amber-50/70 border border-amber-200 rounded-lg">
+                      <div className="flex justify-between items-start mb-1">
+                        <span className="text-[10px] font-bold uppercase bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded">
+                          {alert.category}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium">{alert.date}</span>
                       </div>
                       <p className="text-[11px] text-amber-800 leading-tight">{alert.detail}</p>
                     </li>
@@ -158,7 +212,139 @@ export default function PatientHomeClient({
 
         </div>
 
-        {/* Section 3: Recent Activity & Next Appointment */}
+        {/* Section 3: Live Patient Care Thread & Instant Mobile Reply */}
+        <div className="bg-white rounded-lg border border-slate-200 p-5 shadow-xs">
+          <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+            <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-2">
+              <MessageSquare className="w-4 h-4 text-teal-600" />
+              <span>Direct Patient Care Thread & Mobile Transmission</span>
+            </h2>
+            <span className="text-[11px] text-slate-500 flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
+              Live connection to {patient.name}&apos;s mobile app
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Conversation Log */}
+            <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1">
+              {messages.length > 0 ? (
+                messages.map((msg) => {
+                  const isClinician = msg.fields.authorRole === "clinician" || msg.fields.sender?.includes("Dr.");
+                  return (
+                    <div
+                      key={msg.id}
+                      className={`p-3.5 rounded-lg border text-xs space-y-1.5 ${
+                        isClinician
+                          ? "bg-teal-50/80 border-teal-200 ml-4"
+                          : "bg-slate-50 border-slate-200 mr-4"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className={`font-semibold flex items-center gap-1.5 ${
+                          isClinician ? "text-teal-900" : "text-slate-800"
+                        }`}>
+                          {isClinician ? <Stethoscope size={13} className="text-teal-700" /> : <User size={13} className="text-slate-600" />}
+                          {msg.fields.sender || (isClinician ? "Dr. Jane Smith" : patient.name)}
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          {msg.recordedAt ? new Date(msg.recordedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Recent"}
+                        </span>
+                      </div>
+
+                      <p className="text-slate-700 leading-relaxed">
+                        {msg.fields.body}
+                      </p>
+
+                      <div className="flex items-center justify-between text-[10px] pt-1 border-t border-slate-200/50">
+                        <span className="text-slate-400 font-medium">
+                          {msg.fields.subject || (isClinician ? "Clinical Response" : "Patient Message")}
+                        </span>
+                        <span className={`font-medium ${isClinician ? "text-teal-700" : "text-slate-500"}`}>
+                          {isClinician ? "Sent to Patient's Phone" : "Received from Mobile App"}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="p-8 text-center text-slate-400 text-xs border border-dashed border-slate-200 rounded-lg">
+                  No messages exchanged yet with {patient.name}. Type below to send the first message to their phone.
+                </div>
+              )}
+            </div>
+
+            {/* Compose Response */}
+            <div className="bg-slate-50/70 border border-slate-200 rounded-lg p-4 flex flex-col justify-between">
+              <div>
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">
+                  Send Response to Patient&apos;s Phone
+                </h3>
+                <p className="text-xs text-slate-500 mb-3">
+                  Transmits directly to {patient.name}&apos;s mobile app in real-time.
+                </p>
+
+                {replySuccess && (
+                  <div className="mb-3 flex items-center gap-2 p-2.5 bg-emerald-100 border border-emerald-300 text-emerald-800 text-xs font-medium rounded-lg">
+                    <CheckCircle2 size={15} className="shrink-0 text-emerald-600" />
+                    <span>Response successfully delivered to {patient.name}&apos;s mobile app!</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleSend} className="space-y-3">
+                  <textarea
+                    rows={4}
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    placeholder={`Write clinical message to ${patient.name}... (e.g. adjust medication, symptom guidance, reassurance)`}
+                    className="w-full text-xs p-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
+                  />
+
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {[
+                      "Please continue current dosage and retest in 4 weeks.",
+                      "Take medication with water 30 minutes before breakfast.",
+                      "I reviewed your symptom log. Let's schedule a call.",
+                    ].map((template) => (
+                      <button
+                        key={template}
+                        type="button"
+                        onClick={() => setReplyText(template)}
+                        className="text-[10px] bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 px-2 py-1 rounded transition-colors"
+                      >
+                        {template}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={isSending || !replyText.trim()}
+                      className="bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white text-xs font-semibold py-2 px-4 rounded-lg flex items-center gap-1.5 transition-colors shadow-xs"
+                    >
+                      {isSending ? (
+                        <span>Transmitting...</span>
+                      ) : (
+                        <>
+                          <span>Transmit to Patient Phone</span>
+                          <Send size={13} />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              <div className="text-[10px] text-slate-400 mt-4 border-t border-slate-200/80 pt-2 flex items-center justify-between">
+                <span>Sender Identity: Dr. Jane Smith (Endocrinology)</span>
+                <span>Patient Target: {patient.name} ({patient.id})</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Section 4: Recent Activity & Next Appointment */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
           {/* Recent Activity */}

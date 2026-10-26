@@ -136,12 +136,42 @@ actor CareDatabase {
         let pts = try patients(identity).map(\.id)
         guard !pts.isEmpty else { return try allRecentMessages() }
         let placeholders = pts.map { _ in "?" }.joined(separator: ",")
-        let rows = try connection.rows("SELECT r.body FROM revisions r WHERE r.kind='messages' AND r.patient IN (\(placeholders)) ORDER BY r.rowid DESC LIMIT 50", pts)
+        let query = """
+        SELECT r.body FROM revisions r 
+        WHERE r.kind='messages' 
+          AND r.patient IN (\(placeholders)) 
+          AND r.author != 'c1' 
+          AND json_extract(r.body, '$.fields.authorRole') IS NOT 'clinician'
+          AND json_extract(r.body, '$.recordedAt') > COALESCE(
+            (SELECT MAX(json_extract(body, '$.recordedAt')) 
+             FROM revisions 
+             WHERE kind='messages' 
+               AND patient = r.patient 
+               AND (author = 'c1' OR json_extract(body, '$.fields.authorRole') = 'clinician')),
+            '1970-01-01T00:00:00Z'
+          )
+        ORDER BY r.rowid DESC LIMIT 50
+        """
+        let rows = try connection.rows(query, pts)
         return try rows.map { try JSONDecoder().decode(CareRecord.self, from: Data($0[0].utf8)) }
     }
 
     func allRecentMessages() throws -> [CareRecord] {
-        let rows = try connection.rows("SELECT r.body FROM revisions r WHERE r.kind='messages' ORDER BY r.rowid DESC LIMIT 50")
+        let query = """
+        SELECT r.body FROM revisions r 
+        WHERE r.kind='messages' 
+          AND r.author != 'c1' 
+          AND json_extract(r.body, '$.fields.authorRole') IS NOT 'clinician'
+          AND json_extract(r.body, '$.recordedAt') > COALESCE(
+            (SELECT MAX(json_extract(body, '$.recordedAt')) 
+             FROM revisions 
+             WHERE kind='messages' 
+               AND (author = 'c1' OR json_extract(body, '$.fields.authorRole') = 'clinician')),
+            '1970-01-01T00:00:00Z'
+          )
+        ORDER BY r.rowid DESC LIMIT 50
+        """
+        let rows = try connection.rows(query)
         return try rows.map { try JSONDecoder().decode(CareRecord.self, from: Data($0[0].utf8)) }
     }
 

@@ -11,7 +11,6 @@ struct AppTab {
     enum MainTab: Hashable {
         case home
         case questionaire
-        case summary
         case dashboard
         case prediction
         case medication

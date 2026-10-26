@@ -24,6 +24,8 @@ struct MedicationLogPage: View {
         )
     ]
     @State private var projection: MedicationTSHProjection?
+    @State private var isAnalyzing = false
+    @State private var aiReview: MedicationReviewResponse?
 
     var body: some View {
         ThyroPageScaffold(title: "Medication") {
@@ -32,15 +34,19 @@ struct MedicationLogPage: View {
             demographicSection
             analyzeSection
 
-            if let projection {
+            if let aiReview {
+                aiReviewSection(aiReview)
+            } else if let projection {
                 projectionSection(projection)
             }
         }
         .onChange(of: medicationLog) { _, _ in
             projection = nil
+            aiReview = nil
         }
         .onChange(of: demographicProfile) { _, _ in
             projection = nil
+            aiReview = nil
         }
     }
 
@@ -134,12 +140,313 @@ struct MedicationLogPage: View {
     }
 
     private var analyzeSection: some View {
-        LandingButton(title: "Review medication effects") { showingModelLimit = true }
-            .alert("Medication review", isPresented: $showingModelLimit) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text("Individual medication-to-hormone forecasting is not validated. Amiodarone and lithium are recorded separately from thyroid replacement. Estimated dose ranges remain uncertain; confirm your regimen with your clinician.")
+        VStack(spacing: 8) {
+            Button {
+                guard !isAnalyzing else { return }
+                isAnalyzing = true
+                Task {
+                    let response = await MedicationReviewService.shared.review(
+                        medications: medicationLog,
+                        demographicProfile: demographicProfile
+                    )
+                    withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                        aiReview = response
+                        isAnalyzing = false
+                    }
+                }
+            } label: {
+                HStack(spacing: 14) {
+                    if isAnalyzing {
+                        ProgressView()
+                            .tint(.white)
+                        Text("Analyzing with Gemini 3.5 Flash...")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(.white)
+                    } else {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.2))
+                                .frame(width: 44, height: 44)
+                            Image(systemName: "sparkles")
+                                .font(.title3.weight(.bold))
+                                .foregroundStyle(ThyroUI.mint)
+                        }
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Review Medication Effects")
+                                .font(.headline.weight(.bold))
+                                .foregroundStyle(.white)
+                            Text("Compute PK Kinetics & Gemini 3.5 Flash Model")
+                                .font(.caption)
+                                .foregroundStyle(Color.white.opacity(0.88))
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(.white)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .background(
+                    LinearGradient(
+                        colors: [ThyroUI.teal, ThyroUI.navy],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .shadow(color: ThyroUI.teal.opacity(0.35), radius: 8, x: 0, y: 4)
             }
+            .buttonStyle(.plain)
+            .disabled(isAnalyzing)
+        }
+    }
+
+    private func aiReviewSection(_ review: MedicationReviewResponse) -> some View {
+        VStack(spacing: 16) {
+            ThyroCard {
+                VStack(alignment: .leading, spacing: 14) {
+                    // Header
+                    HStack(alignment: .center) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "sparkles")
+                                .font(.title3)
+                                .foregroundStyle(ThyroUI.teal)
+                            Text("Gemini 3.5 Flash Clinical Review")
+                                .font(.headline.weight(.bold))
+                                .foregroundStyle(ThyroUI.navy)
+                        }
+
+                        Spacer()
+
+                        Text(review.model)
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(ThyroUI.teal)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(ThyroUI.mint)
+                            .clipShape(Capsule())
+                    }
+
+                    // Summary Callout
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "quote.opening")
+                                .font(.caption)
+                                .foregroundStyle(ThyroUI.teal)
+                            Text("Clinical Synthesis")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(ThyroUI.teal)
+                        }
+                        Text(review.summary)
+                            .font(.subheadline)
+                            .foregroundStyle(ThyroUI.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(12)
+                    .background(ThyroUI.mint.opacity(0.35))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                    Divider()
+
+                    // Pharmacokinetic Math Metrics Grid
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Pharmacokinetic Parameters")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(ThyroUI.navy)
+
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                            PKMetricTile(
+                                label: "Oral Bioavailability (F)",
+                                value: "\(String(format: "%.1f", review.pharmacokinetics.bioavailabilityPercent))%",
+                                subtitle: "Fasting & GI adjusted",
+                                color: ThyroUI.teal
+                            )
+                            PKMetricTile(
+                                label: "Elimination Half-Life (t½)",
+                                value: "\(Int(review.pharmacokinetics.halfLifeHours / 24)) days",
+                                subtitle: "\(Int(review.pharmacokinetics.halfLifeHours)) hrs standard",
+                                color: ThyroUI.violet
+                            )
+                            PKMetricTile(
+                                label: "Steady-State Exposure (Css)",
+                                value: "\(String(format: "%.1f", review.pharmacokinetics.steadyStateConcentration)) ng/mL",
+                                subtitle: "Avg circulating level",
+                                color: ThyroUI.coral
+                            )
+                            PKMetricTile(
+                                label: "Total Clearance (CL)",
+                                value: "\(String(format: "%.3f", review.pharmacokinetics.clearanceLitersPerHour)) L/hr",
+                                subtitle: "Renal & hepatic rate",
+                                color: ThyroUI.amber
+                            )
+                            PKMetricTile(
+                                label: "Time to Steady-State",
+                                value: "\(review.pharmacokinetics.daysToSteadyState) days",
+                                subtitle: "5 × elimination t½",
+                                color: ThyroUI.teal
+                            )
+                            PKMetricTile(
+                                label: "Effective Daily Dose",
+                                value: "\(Int(review.pharmacokinetics.effectiveDailyDose.rounded())) mcg",
+                                subtitle: "Adherence scaled",
+                                color: ThyroUI.navy
+                            )
+                        }
+                    }
+
+                    Divider()
+
+                    // Specific Medication Effects & Mechanism of Action
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "pills.circle.fill")
+                                .font(.subheadline)
+                                .foregroundStyle(ThyroUI.teal)
+                            Text("Specific Medication Effects & Mechanism")
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(ThyroUI.navy)
+                        }
+                        Text(review.mechanismOfAction)
+                            .font(.footnote)
+                            .foregroundStyle(ThyroUI.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    // Thyroid Hormone Impact
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "chart.line.uptrend.xyaxis.circle.fill")
+                                .font(.subheadline)
+                                .foregroundStyle(ThyroUI.teal)
+                            Text("Impact on Thyroid Levels")
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(ThyroUI.navy)
+                        }
+
+                        HStack(spacing: 8) {
+                            HormoneShiftBadge(
+                                hormone: "TSH (90d)",
+                                value: String(format: "%.2f", review.projectedTSHAt90Days),
+                                unit: "mIU/L",
+                                baseline: String(format: "%.1f", demographicProfile.baselineTSH),
+                                isReduction: review.projectedTSHAt90Days < demographicProfile.baselineTSH,
+                                color: ThyroUI.teal
+                            )
+                            HormoneShiftBadge(
+                                hormone: "Free T4 Shift",
+                                value: String(format: "+%.2f", review.pharmacokinetics.freeT4Shift),
+                                unit: "ng/dL",
+                                baseline: "Baseline",
+                                isReduction: false,
+                                color: ThyroUI.violet
+                            )
+                            HormoneShiftBadge(
+                                hormone: "Free T3 Shift",
+                                value: String(format: "+%.2f", review.pharmacokinetics.freeT3Shift),
+                                unit: "pg/mL",
+                                baseline: "Baseline",
+                                isReduction: false,
+                                color: ThyroUI.amber
+                            )
+                        }
+
+                        Text(review.thyroidHormoneImpact)
+                            .font(.footnote)
+                            .foregroundStyle(ThyroUI.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    // Absorption & Interactions Advisory
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.subheadline)
+                                .foregroundStyle(ThyroUI.amber)
+                            Text("Absorption & Interactions Advisory")
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(ThyroUI.navy)
+                        }
+                        Text(review.absorptionInteractions)
+                            .font(.footnote)
+                            .foregroundStyle(ThyroUI.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    // Clinical Guidance & Key Takeaways
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "cross.case.fill")
+                                .font(.subheadline)
+                                .foregroundStyle(ThyroUI.teal)
+                            Text("Clinical Guidance & Key Takeaways")
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(ThyroUI.navy)
+                        }
+                        Text(review.clinicalGuidance)
+                            .font(.footnote)
+                            .foregroundStyle(ThyroUI.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(review.keyTakeaways, id: \.self) { takeaway in
+                                HStack(alignment: .top, spacing: 6) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.caption2)
+                                        .foregroundStyle(ThyroUI.teal)
+                                        .padding(.top, 2)
+                                    Text(takeaway)
+                                        .font(.caption)
+                                        .foregroundStyle(ThyroUI.ink)
+                                }
+                            }
+                        }
+                        .padding(.top, 4)
+                    }
+                }
+            }
+
+            // 90-Day Projected TSH Response Curve Chart
+            ThyroCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    ThyroSectionTitle("Projected TSH Curve", subtitle: "90-day trajectory reaching pharmacokinetic steady state")
+
+                    let days = [0, 15, 30, 45, 60, 75, 90]
+                    let pts = days.map { day -> (day: Int, tsh: Double) in
+                        let frac = 1.0 - exp(-Double(day) / 42.0)
+                        let v = demographicProfile.baselineTSH + (review.projectedTSHAt90Days - demographicProfile.baselineTSH) * frac
+                        return (day: day, tsh: (v * 100).rounded() / 100)
+                    }
+
+                    Chart(pts, id: \.day) { pt in
+                        LineMark(
+                            x: .value("Day", pt.day),
+                            y: .value("TSH", pt.tsh)
+                        )
+                        .foregroundStyle(ThyroUI.teal)
+                        .lineStyle(StrokeStyle(lineWidth: 3.5, lineCap: .round, lineJoin: .round))
+
+                        PointMark(
+                            x: .value("Day", pt.day),
+                            y: .value("TSH", pt.tsh)
+                        )
+                        .foregroundStyle(ThyroUI.coral)
+                    }
+                    .chartXAxisLabel("Days from start")
+                    .chartYAxisLabel("TSH mIU/L")
+                    .frame(height: 200)
+
+                    HStack(spacing: 12) {
+                        MetricBadge(title: "Steady-State TSH", value: String(format: "%.2f", review.projectedTSHAt90Days), color: ThyroUI.teal)
+                        MetricBadge(title: "Target TSH", value: String(format: "%.2f", review.targetTSH), color: ThyroUI.violet)
+                    }
+                }
+            }
+        }
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
     }
 
     private func projectionSection(_ projection: MedicationTSHProjection) -> some View {
@@ -321,4 +628,64 @@ private struct MetricBadge: View {
 
 #Preview {
     MedicationLogPage()
+}
+
+
+// MARK: - Pharmacokinetic UI Helper Components
+
+struct PKMetricTile: View {
+    let label: String
+    let value: String
+    let subtitle: String
+    let color: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(color)
+            Text(value)
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundStyle(ThyroUI.navy)
+            Text(subtitle)
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(color.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+struct HormoneShiftBadge: View {
+    let hormone: String
+    let value: String
+    let unit: String
+    let baseline: String
+    let isReduction: Bool
+    let color: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(hormone)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(color)
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(value)
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(ThyroUI.navy)
+                Text(unit)
+                    .font(.system(size: 7, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            Text("from \(baseline)")
+                .font(.system(size: 8))
+                .foregroundStyle(.secondary)
+        }
+        .padding(6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(color.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
 }

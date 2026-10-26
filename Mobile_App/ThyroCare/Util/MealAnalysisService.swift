@@ -27,14 +27,15 @@ struct MealAnalysisService {
         return URL(string: "https://thyrocare-9qfo.onrender.com")!
     }
 
-    func analyze(imageData: Data, mimeType: String = "image/jpeg") async throws -> MealAnalysis {
+    func analyze(imageData: Data, mimeType: String = "image/jpeg", patientId: String = "p1") async throws -> MealAnalysis {
         let url = baseURL.appending(path: "analyze-meal")
         let uploadImageData = try compressedJPEGData(from: imageData)
         let localClassifications = try? LocalFoodImageClassifier.classify(imageData: uploadImageData)
         let requestBody = AnalyzeMealRequest(
             imageBase64: uploadImageData.base64EncodedString(),
             mimeType: "image/jpeg",
-            localClassifications: localClassifications
+            localClassifications: localClassifications,
+            patientId: patientId
         )
         let encodedBody = try JSONEncoder().encode(requestBody)
 
@@ -124,6 +125,7 @@ private struct AnalyzeMealRequest: Encodable {
     let imageBase64: String?
     let mimeType: String
     let localClassifications: [LocalFoodClassification]?
+    let patientId: String?
 }
 
 struct LocalFoodClassification: Codable {
@@ -240,6 +242,45 @@ enum MealImageFactory {
 
 enum MealThyroidImpactCalculator {
     static func applyLocalImpact(to meal: MealAnalysis) -> MealAnalysis {
+        let lowerName = meal.name.lowercased()
+        let isZeroDrink = lowerName.contains("water") || lowerName.contains("seltzer")
+            || ((lowerName.contains("tea") || lowerName.contains("coffee"))
+                && !lowerName.contains("latte") && !lowerName.contains("milk") && !lowerName.contains("sugar") && !lowerName.contains("sweet"))
+            || lowerName.contains("diet") || lowerName.contains("zero sugar")
+            || (meal.protein == 0 && meal.carbs == 0 && meal.vitamins == 0 && meal.produce == 0)
+
+        if isZeroDrink {
+            return MealAnalysis(
+                id: meal.id,
+                name: meal.name,
+                timeLabel: meal.timeLabel,
+                confidence: meal.confidence,
+                protein: 0,
+                carbs: 0,
+                vitamins: 0,
+                produce: 0,
+                tshImpact: "Neutral (Hydration)",
+                t3Impact: "Neutral (Hydration)",
+                t4Impact: "Neutral (Hydration)",
+                tshPercentChange: 0.0,
+                t3PercentChange: 0.0,
+                t4PercentChange: 0.0,
+                usdaMatchName: meal.usdaMatchName,
+                usdaFdcId: meal.usdaFdcId,
+                usdaDataType: meal.usdaDataType,
+                usdaQuery: meal.usdaQuery,
+                usdaApiCallLatencyMs: meal.usdaApiCallLatencyMs,
+                iodineMicrograms: meal.iodineMicrograms,
+                seleniumMicrograms: meal.seleniumMicrograms,
+                calciumMilligrams: meal.calciumMilligrams,
+                sodiumMilligrams: meal.sodiumMilligrams,
+                goitrogenRiskLevel: "None",
+                levothyroxineAbsorptionRisk: "Optimal — Pure hydration aids absorption",
+                rawUsdaJsonResponse: meal.rawUsdaJsonResponse,
+                estimatedCalories: 0.0
+            )
+        }
+
         let normalized = normalizedFoodPercentages(
             protein: meal.protein,
             carbs: meal.carbs,
@@ -254,6 +295,7 @@ enum MealThyroidImpactCalculator {
         )
 
         return MealAnalysis(
+            id: meal.id,
             name: meal.name,
             timeLabel: meal.timeLabel,
             confidence: meal.confidence,
@@ -278,7 +320,8 @@ enum MealThyroidImpactCalculator {
             sodiumMilligrams: meal.sodiumMilligrams,
             goitrogenRiskLevel: meal.goitrogenRiskLevel,
             levothyroxineAbsorptionRisk: meal.levothyroxineAbsorptionRisk,
-            rawUsdaJsonResponse: meal.rawUsdaJsonResponse
+            rawUsdaJsonResponse: meal.rawUsdaJsonResponse,
+            estimatedCalories: meal.estimatedCalories
         )
     }
 
@@ -292,7 +335,7 @@ enum MealThyroidImpactCalculator {
         let total = rawValues.reduce(0, +)
 
         guard total > 0 else {
-            return (25, 35, 20, 20)
+            return (0, 0, 0, 0)
         }
 
         var percentages = rawValues.map { Int((Double($0) / Double(total) * 100).rounded()) }
@@ -303,10 +346,10 @@ enum MealThyroidImpactCalculator {
 
         let normalizedValues = percentages + Array(repeating: 0, count: max(0, 4 - percentages.count))
         return (
-            normalizedValues[safe: 0] ?? 25,
-            normalizedValues[safe: 1] ?? 35,
-            normalizedValues[safe: 2] ?? 20,
-            normalizedValues[safe: 3] ?? 20
+            normalizedValues[safe: 0] ?? 0,
+            normalizedValues[safe: 1] ?? 0,
+            normalizedValues[safe: 2] ?? 0,
+            normalizedValues[safe: 3] ?? 0
         )
     }
 
@@ -316,6 +359,17 @@ enum MealThyroidImpactCalculator {
         vitamins: Int,
         produce: Int
     ) -> ThyroidImpact {
+        if protein <= 0 && carbs <= 0 && vitamins <= 0 && produce <= 0 {
+            return ThyroidImpact(
+                tshDescription: "0%",
+                t3Description: "0%",
+                t4Description: "0%",
+                tshPercentChange: 0.0,
+                t3PercentChange: 0.0,
+                t4PercentChange: 0.0
+            )
+        }
+
         let features = ThyroidNutritionFeatureVector(
             protein: Double(protein),
             carbs: Double(carbs),
@@ -328,9 +382,9 @@ enum MealThyroidImpactCalculator {
         let t4 = ThyroidNutritionWeights.score(features, weights: ThyroidNutritionWeights.t4).rounded(to: 1)
 
         return ThyroidImpact(
-            tshDescription: tsh <= 0 ? "Likely support" : "May increase",
-            t3Description: t3 >= 0 ? "Support" : "May dip",
-            t4Description: t4 >= 0 ? "Support" : "May dip",
+            tshDescription: tsh == 0 ? "0%" : (tsh <= 0 ? "Likely support" : "May increase"),
+            t3Description: t3 == 0 ? "0%" : (t3 >= 0 ? "Support" : "May dip"),
+            t4Description: t4 == 0 ? "0%" : (t4 >= 0 ? "Support" : "May dip"),
             tshPercentChange: tsh,
             t3PercentChange: t3,
             t4PercentChange: t4
@@ -363,6 +417,9 @@ private enum ThyroidNutritionWeights {
     static let t4 = ThyroidNutritionWeightSet(protein: 0.24001525, carbs: 0.35777575, vitamins: 0.29357228, produce: -0.10863672)
 
     static func score(_ features: ThyroidNutritionFeatureVector, weights: ThyroidNutritionWeightSet) -> Double {
+        if features.protein <= 0 && features.carbs <= 0 && features.vitamins <= 0 && features.produce <= 0 {
+            return 0.0
+        }
         let centeredProtein = (features.protein - baseline.protein) / 100.0
         let centeredCarbs = (features.carbs - baseline.carbs) / 100.0
         let centeredVitamins = (features.vitamins - baseline.vitamins) / 100.0

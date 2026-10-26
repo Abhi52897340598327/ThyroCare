@@ -17,7 +17,7 @@ struct PicturePage: View {
     @AppStorage("severityPercentile") private var storedSeverityPercentile = 0
 
     private var latestMeal: MealAnalysis {
-        meals.first ?? MealAnalysis.scannedSample
+        meals.first ?? MealAnalysis.empty
     }
 
     var body: some View {
@@ -454,12 +454,25 @@ struct MealCameraPage: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                Text("\(Int(meal.confidence * 100))% AI Match")
-                                    .font(.caption.weight(.bold))
-                                    .foregroundStyle(ThyroUI.teal)
+                                VStack(alignment: .trailing, spacing: 4) {
+                                    Text("\(Int(meal.confidence * 100))% AI Match")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(ThyroUI.teal)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Capsule().fill(ThyroUI.softGray))
+
+                                    HStack(spacing: 3) {
+                                        Image(systemName: "flame.fill")
+                                            .font(.caption2)
+                                        Text("\(Int(meal.estimatedCalories)) kcal")
+                                            .font(.caption.weight(.bold))
+                                    }
+                                    .foregroundStyle(ThyroUI.coral)
                                     .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Capsule().fill(ThyroUI.softGray))
+                                    .padding(.vertical, 3)
+                                    .background(Capsule().fill(Color.orange.opacity(0.12)))
+                                }
                             }
 
                             Divider()
@@ -638,8 +651,9 @@ struct MealCameraPage: View {
                     throw CareClientError.message("Could not prepare image for analysis.")
                 }
 
+                let activePid = store?.session?.user.id ?? "p1"
                 // Call MealAnalysisService (Gemini + USDA)
-                let meal = try await MealAnalysisService.shared.analyze(imageData: jpeg)
+                let meal = try await MealAnalysisService.shared.analyze(imageData: jpeg, patientId: activePid)
                 scannedMeal = meal
 
                 // Automatically save to meal history
@@ -653,7 +667,7 @@ struct MealCameraPage: View {
                     formatter.dateFormat = "yyyy-MM-dd"
                     let day = formatter.string(from: mealDate)
                     formatter.dateFormat = "HH:mm"
-                    let fields = [
+                    let fields: [String: String] = [
                         "description": meal.name,
                         "observedDate": day,
                         "mealTime": formatter.string(from: mealDate),
@@ -661,10 +675,31 @@ struct MealCameraPage: View {
                         "capturedAt": (captureDate ?? Date()).ISO8601Format(),
                         "diet": diet,
                         "analysisStatus": "complete",
-                        "analysisModel": "gemini-3.5-flash",
                         "analysisAt": Date().ISO8601Format(),
                         "recognizedFoods": meal.name,
                         "usdaMatch": meal.usdaMatchName,
+                        "usdaMatchName": meal.usdaMatchName,
+                        "usdaFdcId": meal.usdaFdcId,
+                        "usdaDataType": meal.usdaDataType,
+                        "usdaQuery": meal.usdaQuery,
+                        "latencyMs": String(meal.usdaApiCallLatencyMs),
+                        "iodine": String(format: "%.1f µg", meal.iodineMicrograms),
+                        "selenium": String(format: "%.1f µg", meal.seleniumMicrograms),
+                        "calcium": String(format: "%.0f mg", meal.calciumMilligrams),
+                        "sodium": String(format: "%.0f mg", meal.sodiumMilligrams),
+                        "tshShift": (meal.tshPercentChange >= 0 ? "+" : "") + String(format: "%.1f%%", meal.tshPercentChange),
+                        "t3Shift": (meal.t3PercentChange >= 0 ? "+" : "") + String(format: "%.1f%%", meal.t3PercentChange),
+                        "t4Shift": (meal.t4PercentChange >= 0 ? "+" : "") + String(format: "%.1f%%", meal.t4PercentChange),
+                        "tshStatus": meal.tshImpact,
+                        "t3Status": meal.t3Impact,
+                        "t4Status": meal.t4Impact,
+                        "levoRisk": meal.levothyroxineAbsorptionRisk,
+                        "jsonPayload": meal.rawUsdaJsonResponse,
+                        "protein": String(meal.protein),
+                        "carbs": String(meal.carbs),
+                        "vitamins": String(meal.vitamins),
+                        "produce": String(meal.produce),
+                        "calories": "\(Int(meal.estimatedCalories))",
                         "hasPhoto": "true",
                         "source": "Patient camera photo analyzed with Gemini 3.5 Flash",
                         "summary": "AI identified: \(meal.name) (USDA: \(meal.usdaMatchName)). Protein: \(meal.protein)%, Carbs: \(meal.carbs)%, Produce: \(meal.produce)%."
@@ -996,7 +1031,22 @@ struct MealNutritionSummary: View {
             )
             .frame(width: 92, height: 92)
 
-            VStack(spacing: 8) {
+            VStack(spacing: 6) {
+                HStack {
+                    HStack(spacing: 4) {
+                        Image(systemName: "flame.fill")
+                            .font(.caption)
+                        Text("\(Int(meal.estimatedCalories)) kcal")
+                            .font(.subheadline.weight(.bold))
+                    }
+                    .foregroundStyle(ThyroUI.coral)
+                    Spacer()
+                    Text("Est. Energy")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.bottom, 2)
+
                 MetricRow(title: "Protein", value: "\(meal.protein)%", color: ThyroUI.teal)
                 MetricRow(title: "Carbs", value: "\(meal.carbs)%", color: ThyroUI.amber)
                 MetricRow(title: "Vitamins", value: "\(meal.vitamins)%", color: ThyroUI.violet)
@@ -1021,9 +1071,18 @@ struct MealHistoryRow: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text("\(Int(meal.confidence * 100))%")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(ThyroUI.teal)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(Int(meal.confidence * 100))%")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(ThyroUI.teal)
+                    HStack(spacing: 2) {
+                        Image(systemName: "flame.fill")
+                            .font(.caption2)
+                        Text("\(Int(meal.estimatedCalories)) kcal")
+                            .font(.caption.weight(.bold))
+                    }
+                    .foregroundStyle(ThyroUI.coral)
+                }
             }
 
             HStack(spacing: 10) {
@@ -1249,30 +1308,31 @@ struct MealAnalysis: Identifiable, Equatable, Codable {
     let name: String
     let timeLabel: String
     let confidence: Double
-    let protein: Int
-    let carbs: Int
-    let vitamins: Int
-    let produce: Int
-    let tshImpact: String
-    let t3Impact: String
-    let t4Impact: String
-    let tshPercentChange: Double
-    let t3PercentChange: Double
-    let t4PercentChange: Double
+    var protein: Int
+    var carbs: Int
+    var vitamins: Int
+    var produce: Int
+    var tshImpact: String
+    var t3Impact: String
+    var t4Impact: String
+    var tshPercentChange: Double
+    var t3PercentChange: Double
+    var t4PercentChange: Double
 
     // USDA API & Micronutrient Metadata
-    var usdaMatchName: String = "Grilled Chicken Breast & Rice Bowl (USDA #171077)"
-    var usdaFdcId: String = "171077"
-    var usdaDataType: String = "SR Legacy / Foundation"
-    var usdaQuery: String = "chicken breast rice broccoli"
-    var usdaApiCallLatencyMs: Int = 142
-    var iodineMicrograms: Double = 12.5
-    var seleniumMicrograms: Double = 34.8
-    var calciumMilligrams: Double = 45.0
-    var sodiumMilligrams: Double = 420.0
-    var goitrogenRiskLevel: String = "Low (Cooked Vegetables)"
-    var levothyroxineAbsorptionRisk: String = "Moderate — Separate from dose by 4 hours"
-    var rawUsdaJsonResponse: String = "{\"status\":\"USDA response unavailable\"}"
+    var usdaMatchName: String = "USDA match unavailable"
+    var usdaFdcId: String = "0"
+    var usdaDataType: String = "Unavailable"
+    var usdaQuery: String = "Unavailable"
+    var usdaApiCallLatencyMs: Int = 0
+    var iodineMicrograms: Double = 0.0
+    var seleniumMicrograms: Double = 0.0
+    var calciumMilligrams: Double = 0.0
+    var sodiumMilligrams: Double = 0.0
+    var goitrogenRiskLevel: String = "None"
+    var levothyroxineAbsorptionRisk: String = "None"
+    var rawUsdaJsonResponse: String = "{}"
+    var estimatedCalories: Double = 0.0
 
     var totalFoodPercent: Int {
         protein + carbs + vitamins + produce
@@ -1284,10 +1344,11 @@ struct MealAnalysis: Identifiable, Equatable, Codable {
         case usdaMatchName, usdaFdcId, usdaDataType, usdaQuery, usdaApiCallLatencyMs
         case iodineMicrograms, seleniumMicrograms, calciumMilligrams, sodiumMilligrams
         case goitrogenRiskLevel, levothyroxineAbsorptionRisk, rawUsdaJsonResponse
+        case estimatedCalories
     }
 
     private enum NutritionCodingKeys: String, CodingKey {
-        case nutritionDetails
+        case nutritionDetails, calories
     }
 
     init(
@@ -1316,7 +1377,8 @@ struct MealAnalysis: Identifiable, Equatable, Codable {
         sodiumMilligrams: Double = 0,
         goitrogenRiskLevel: String = "Not evaluated",
         levothyroxineAbsorptionRisk: String = "Not evaluated",
-        rawUsdaJsonResponse: String? = nil
+        rawUsdaJsonResponse: String? = nil,
+        estimatedCalories: Double = 0.0
     ) {
         self.id = id
         self.name = name
@@ -1346,6 +1408,7 @@ struct MealAnalysis: Identifiable, Equatable, Codable {
         if let rawUsdaJsonResponse {
             self.rawUsdaJsonResponse = rawUsdaJsonResponse
         }
+        self.estimatedCalories = estimatedCalories
     }
 
     init(from decoder: Decoder) throws {
@@ -1353,17 +1416,17 @@ struct MealAnalysis: Identifiable, Equatable, Codable {
         id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         name = try container.decode(String.self, forKey: .name)
         timeLabel = try container.decode(String.self, forKey: .timeLabel)
-        confidence = try container.decode(Double.self, forKey: .confidence)
-        protein = try container.decode(Int.self, forKey: .protein)
-        carbs = try container.decode(Int.self, forKey: .carbs)
-        vitamins = try container.decode(Int.self, forKey: .vitamins)
-        produce = try container.decode(Int.self, forKey: .produce)
-        tshImpact = try container.decode(String.self, forKey: .tshImpact)
-        t3Impact = try container.decode(String.self, forKey: .t3Impact)
-        t4Impact = try container.decode(String.self, forKey: .t4Impact)
-        tshPercentChange = try container.decode(Double.self, forKey: .tshPercentChange)
-        t3PercentChange = try container.decode(Double.self, forKey: .t3PercentChange)
-        t4PercentChange = try container.decode(Double.self, forKey: .t4PercentChange)
+        confidence = try container.decodeIfPresent(Double.self, forKey: .confidence) ?? 0.0
+        protein = try container.decodeIfPresent(Int.self, forKey: .protein) ?? 0
+        carbs = try container.decodeIfPresent(Int.self, forKey: .carbs) ?? 0
+        vitamins = try container.decodeIfPresent(Int.self, forKey: .vitamins) ?? 0
+        produce = try container.decodeIfPresent(Int.self, forKey: .produce) ?? 0
+        tshImpact = try container.decodeIfPresent(String.self, forKey: .tshImpact) ?? "0%"
+        t3Impact = try container.decodeIfPresent(String.self, forKey: .t3Impact) ?? "0%"
+        t4Impact = try container.decodeIfPresent(String.self, forKey: .t4Impact) ?? "0%"
+        tshPercentChange = try container.decodeIfPresent(Double.self, forKey: .tshPercentChange) ?? 0.0
+        t3PercentChange = try container.decodeIfPresent(Double.self, forKey: .t3PercentChange) ?? 0.0
+        t4PercentChange = try container.decodeIfPresent(Double.self, forKey: .t4PercentChange) ?? 0.0
 
         let nutritionContainer = try decoder.container(keyedBy: NutritionCodingKeys.self)
         let legacyNutritionDetails = try nutritionContainer.decodeIfPresent(
@@ -1399,7 +1462,63 @@ struct MealAnalysis: Identifiable, Equatable, Codable {
         } else {
             rawUsdaJsonResponse = "{\"status\":\"USDA response unavailable\"}"
         }
+
+        let lowerName = name.lowercased()
+        let isZeroDrink = lowerName.contains("water") || lowerName.contains("seltzer")
+            || ((lowerName.contains("tea") || lowerName.contains("coffee"))
+                && !lowerName.contains("latte") && !lowerName.contains("milk") && !lowerName.contains("sugar") && !lowerName.contains("sweet"))
+            || lowerName.contains("diet") || lowerName.contains("zero sugar")
+
+        if isZeroDrink || (protein == 0 && carbs == 0 && vitamins == 0 && produce == 0) {
+            estimatedCalories = 0.0
+            protein = 0
+            carbs = 0
+            vitamins = 0
+            produce = 0
+            tshPercentChange = 0.0
+            t3PercentChange = 0.0
+            t4PercentChange = 0.0
+            tshImpact = "0%"
+            t3Impact = "0%"
+            t4Impact = "0%"
+        } else if let decodedCal = try? container.decodeIfPresent(Double.self, forKey: .estimatedCalories) {
+            estimatedCalories = decodedCal
+        } else if let altCal = try? nutritionContainer.decodeIfPresent(Double.self, forKey: .calories) {
+            estimatedCalories = altCal
+        } else {
+            let totalNutrients = Double(protein * 4 + carbs * 4 + produce * 2 + vitamins * 2)
+            estimatedCalories = max(0, totalNutrients)
+        }
     }
+
+    static let empty = MealAnalysis(
+        name: "No Meal Scanned",
+        timeLabel: "—",
+        confidence: 0.0,
+        protein: 0,
+        carbs: 0,
+        vitamins: 0,
+        produce: 0,
+        tshImpact: "0%",
+        t3Impact: "0%",
+        t4Impact: "0%",
+        tshPercentChange: 0.0,
+        t3PercentChange: 0.0,
+        t4PercentChange: 0.0,
+        usdaMatchName: "Unavailable",
+        usdaFdcId: "0",
+        usdaDataType: "Unavailable",
+        usdaQuery: "Unavailable",
+        usdaApiCallLatencyMs: 0,
+        iodineMicrograms: 0.0,
+        seleniumMicrograms: 0.0,
+        calciumMilligrams: 0.0,
+        sodiumMilligrams: 0.0,
+        goitrogenRiskLevel: "None",
+        levothyroxineAbsorptionRisk: "None",
+        rawUsdaJsonResponse: "{}",
+        estimatedCalories: 0.0
+    )
 
     static let scannedSample = MealAnalysis(
         name: "Grilled chicken bowl",
@@ -1443,7 +1562,8 @@ struct MealAnalysis: Identifiable, Equatable, Codable {
             sodiumMilligrams: sodiumMilligrams,
             goitrogenRiskLevel: goitrogenRiskLevel,
             levothyroxineAbsorptionRisk: levothyroxineAbsorptionRisk,
-            rawUsdaJsonResponse: rawUsdaJsonResponse
+            rawUsdaJsonResponse: rawUsdaJsonResponse,
+            estimatedCalories: estimatedCalories
         )
     }
 }

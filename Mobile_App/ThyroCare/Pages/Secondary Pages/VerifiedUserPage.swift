@@ -2,9 +2,14 @@ import SwiftUI
 
 struct VerifiedUserPage: View {
     let onViewDashboard: () -> Void
+    var onOpenDailyTasks: () -> Void
 
-    init(onViewDashboard: @escaping () -> Void = {}) {
+    init(
+        onViewDashboard: @escaping () -> Void = {},
+        onOpenDailyTasks: @escaping () -> Void = {}
+    ) {
         self.onViewDashboard = onViewDashboard
+        self.onOpenDailyTasks = onOpenDailyTasks
     }
 
     var body: some View {
@@ -31,6 +36,24 @@ struct VerifiedUserPage: View {
                     }
 
                     LandingButton(title: Constants.viewDashboardString, action: onViewDashboard)
+
+                    Button(action: onOpenDailyTasks) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "list.clipboard.fill")
+                            Text("Open Daily Tasks")
+                                .font(.headline.weight(.semibold))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .foregroundStyle(ThyroUI.navy)
+                        .background(Color.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(ThyroUI.teal.opacity(0.4), lineWidth: 1.5)
+                        )
+                        .shadow(color: ThyroUI.navy.opacity(0.04), radius: 6, x: 0, y: 2)
+                    }
                 }
             }
         }

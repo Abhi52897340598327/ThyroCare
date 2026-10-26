@@ -32,6 +32,7 @@ struct QuestionairePage: View {
     @State private var waitHours = ""
     @State private var takesIronCalcium = false
     @State private var shouldShowPrediction = false
+    @State private var showingSummaryOverlay = false
     @State private var submittedResult = ThyroSeverityResult.baseline
 
     @AppStorage("severityScore") private var storedSeverityScore = 0
@@ -56,7 +57,8 @@ struct QuestionairePage: View {
     private let frequencies = ["Daily", "Weekly", "Biweekly", "Monthly"]
 
     var body: some View {
-        ThyroPageScaffold(title: "Questionnaire") {
+        ZStack {
+            ThyroPageScaffold(title: "Questionnaire") {
             ThyroCard {
                 ThyroSectionTitle("Before we start", subtitle: "Review the study terms and confirm eligibility.")
 
@@ -201,7 +203,44 @@ struct QuestionairePage: View {
                 Text("Calcium and biotin can be recorded separately under medicines and supplements.").font(.footnote)
             }
         }
-        .onAppear {
+        .disabled(showingSummaryOverlay)
+
+        if showingSummaryOverlay {
+            Color.black.opacity(0.35)
+                .ignoresSafeArea()
+                .transition(.opacity)
+                .onTapGesture {
+                    withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+                        showingSummaryOverlay = false
+                    }
+                }
+
+            SummaryOverlayView(
+                result: submittedResult,
+                onDismiss: {
+                    withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+                        showingSummaryOverlay = false
+                    }
+                },
+                onGoToDashboard: {
+                    withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+                        showingSummaryOverlay = false
+                    }
+                    onGoToDashboard?()
+                },
+                onViewPrediction: {
+                    withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+                        showingSummaryOverlay = false
+                    }
+                    shouldShowPrediction = true
+                }
+            )
+            .transition(.move(edge: .bottom))
+            .zIndex(20)
+        }
+    }
+    .animation(.spring(response: 0.45, dampingFraction: 0.85), value: showingSummaryOverlay)
+    .onAppear {
             applyMealHistoryDietIfAvailable()
             guard !restoredContext, let fields = store?.questionnaireRecord?.fields else { return }
             restoredContext = true
@@ -427,8 +466,10 @@ struct QuestionairePage: View {
         storedTSHDecrease = result.tshDecrease
         storedT3Improvement = result.t3Improvement
         storedT4Improvement = result.t4Improvement
-        shouldShowPrediction = true
         onSubmitted?(result)
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+            showingSummaryOverlay = true
+        }
     }
 }
 
@@ -447,5 +488,163 @@ private extension Int {
 #Preview {
     NavigationStack {
         QuestionairePage()
+    }
+}
+
+
+struct SummaryOverlayView: View {
+    let result: ThyroSeverityResult
+    var onDismiss: () -> Void
+    var onGoToDashboard: () -> Void
+    var onViewPrediction: () -> Void
+
+    @State private var dragOffset: CGFloat = 0
+    @AppStorage("severityScore") private var severityScore = 0
+    @AppStorage("severityPercentile") private var severityPercentile = 0
+    @AppStorage("tshDecrease") private var tshDecrease = 0
+    @AppStorage("t3Improvement") private var t3Improvement = 0
+    @AppStorage("t4Improvement") private var t4Improvement = 0
+
+    private var currentSeverity: Int {
+        result.score > 0 ? result.score : (severityScore > 0 ? severityScore : 0)
+    }
+
+    private var currentPercentile: Int {
+        result.percentile > 0 ? result.percentile : (severityPercentile > 0 ? severityPercentile : 0)
+    }
+
+    private var currentTSHDecrease: Int {
+        result.tshDecrease > 0 ? result.tshDecrease : (tshDecrease > 0 ? tshDecrease : 0)
+    }
+
+    private var currentT3Improvement: Int {
+        result.t3Improvement > 0 ? result.t3Improvement : (t3Improvement > 0 ? t3Improvement : 0)
+    }
+
+    private var currentT4Improvement: Int {
+        result.t4Improvement > 0 ? result.t4Improvement : (t4Improvement > 0 ? t4Improvement : 0)
+    }
+
+    private var normalizedSeverity: Double {
+        Double(currentSeverity) / 100.0
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Drag handle
+            Capsule()
+                .fill(Color.gray.opacity(0.35))
+                .frame(width: 44, height: 5)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
+
+            // Header bar
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Summary")
+                        .font(.system(size: 30, weight: .bold))
+                        .foregroundStyle(ThyroUI.navy)
+                    Text("Check-in & Predicted Thyroid Outlook")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 26))
+                        .foregroundStyle(Color.gray.opacity(0.6))
+                }
+                .accessibilityLabel("Close summary")
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 12)
+
+            // Scrollable Content
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    ThyroCard {
+                        ThyroSectionTitle("Latest check-in", subtitle: "A compact view of your questionnaire and predicted thyroid trend.")
+
+                        HStack(spacing: 14) {
+                            AnimatedMetricRing(title: "Severity", value: normalizedSeverity, color: ThyroUI.coral)
+                            VStack(alignment: .leading, spacing: 8) {
+                                MetricRow(title: "Percentile", value: currentPercentile > 0 ? "\(currentPercentile)th" : "Pending", color: ThyroUI.coral)
+                                MetricRow(title: "TSH outlook", value: currentSeverity > 65 ? "High" : "Moderate", color: ThyroUI.amber)
+                                MetricRow(title: "Medication timing", value: "Tracked", color: ThyroUI.teal)
+                                MetricRow(title: "Diet balance", value: "Scored", color: ThyroUI.violet)
+                            }
+                        }
+                    }
+
+                    ThyroCard {
+                        ThyroSectionTitle("Projected improvements")
+
+                        AnimatedBarChart(
+                            values: [Double(currentTSHDecrease) / 100.0, Double(currentT3Improvement) / 100.0, Double(currentT4Improvement) / 100.0],
+                            labels: ["TSH", "T3", "T4"],
+                            color: ThyroUI.teal
+                        )
+
+                        Text("With consistent habits, ThyroCare predicts your TSH could decrease by \(currentTSHDecrease)%, T3 improve by \(currentT3Improvement)%, and T4 improve by \(currentT4Improvement)%.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    ThyroCard {
+                        ThyroSectionTitle("Algorithm snapshot")
+                        MetricRow(title: "Inputs standardized", value: "Complete", color: ThyroUI.teal)
+                        MetricRow(title: "Clinical weights applied", value: "Offline", color: ThyroUI.amber)
+                        MetricRow(title: "Geometric distance score", value: "\(currentSeverity)/100", color: ThyroUI.coral)
+                    }
+
+                    VStack(spacing: 12) {
+                        LandingButton(title: "Go to Dashboard") {
+                            onGoToDashboard()
+                        }
+
+                        Button(action: onViewPrediction) {
+                            Text("View Full Risk Analysis")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(ThyroUI.teal)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                        }
+                    }
+                    .padding(.top, 8)
+                    .padding(.bottom, 24)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 6)
+            }
+        }
+        .background(
+            LinearGradient(
+                colors: [.white, ThyroUI.mint.opacity(0.35)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .shadow(color: .black.opacity(0.25), radius: 24, x: 0, y: -6)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .padding(.top, 44)
+        .ignoresSafeArea(edges: .bottom)
+        .offset(y: max(0, dragOffset))
+        .gesture(
+            DragGesture()
+                .onChanged { value in
+                    if value.translation.height > 0 {
+                        dragOffset = value.translation.height
+                    }
+                }
+                .onEnded { value in
+                    if value.translation.height > 120 {
+                        onDismiss()
+                    }
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        dragOffset = 0
+                    }
+                }
+        )
     }
 }

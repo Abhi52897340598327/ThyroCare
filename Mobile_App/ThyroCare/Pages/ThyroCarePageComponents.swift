@@ -319,6 +319,8 @@ struct DonutSegmentChart: View {
 
     var body: some View {
         ZStack {
+            Circle()
+                .stroke(ThyroUI.softGray.opacity(0.8), style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
             ForEach(values.indices, id: \.self) { index in
                 Circle()
                     .trim(from: start(for: index), to: end(for: index))

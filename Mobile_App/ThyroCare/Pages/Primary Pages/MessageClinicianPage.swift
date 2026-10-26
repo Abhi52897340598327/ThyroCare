@@ -5,6 +5,7 @@ struct LocalMessageRecord: Identifiable, Codable {
     let body: String
     let subject: String
     let sender: String
+    var isFromClinician: Bool = false
     let timestamp: Date
 
     var formattedDate: String {
@@ -57,17 +58,29 @@ struct MessageClinicianPage: View {
     }
 
     private var allMessages: [LocalMessageRecord] {
-        var results = cachedMessages
+        var results: [LocalMessageRecord] = []
         if let store {
             for record in store.entries("messages") {
                 if !results.contains(where: { $0.id == record.id }) {
                     let sub = record.fields["subject"] ?? "Care Message"
                     let body = record.fields["body"] ?? ""
-                    let sender = record.fields["sender"] ?? (store.session?.user.name ?? "Eleanor Vance")
+                    let isClinician = record.fields["authorRole"] == "clinician" || (record.fields["sender"]?.contains("Dr.") ?? false)
+                    let defaultSender = isClinician ? "Dr. Jane Smith (Endocrinology)" : (store.session?.user.name ?? "Eleanor Vance")
+                    let sender = record.fields["sender"] ?? defaultSender
                     let date = ISO8601DateFormatter().date(from: record.recordedAt) ?? Date()
-                    results.append(LocalMessageRecord(id: record.id, body: body, subject: sub, sender: sender, timestamp: date))
+                    results.append(LocalMessageRecord(
+                        id: record.id,
+                        body: body,
+                        subject: sub,
+                        sender: sender,
+                        isFromClinician: isClinician,
+                        timestamp: date
+                    ))
                 }
             }
+        }
+        if results.isEmpty {
+            results = cachedMessages
         }
         return results.sorted(by: { $0.timestamp > $1.timestamp })
     }
@@ -88,50 +101,42 @@ struct MessageClinicianPage: View {
                             .foregroundStyle(ThyroUI.teal)
                     }
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 3) {
                         Text(clinicianName)
                             .font(.headline)
                             .foregroundStyle(ThyroUI.navy)
-                        Text("Department of Endocrinology & Metabolism")
-                            .font(.subheadline)
+                        Text("Specialty: Thyroid Endocrinology & Metabolic Care")
+                            .font(.caption)
                             .foregroundStyle(.secondary)
-
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(Color.green)
-                                .frame(width: 7, height: 7)
-                            Text("Active Clinician Dashboard Connection")
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(ThyroUI.teal)
-                        }
+                        Text("Response Time: Typically within 24 hours")
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(ThyroUI.teal)
                     }
+                }
+                .padding(.vertical, 4)
+
+                Divider()
+
+                HStack {
+                    Label("Status: Active Care Thread", systemImage: "circle.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.green)
+
+                    Spacer()
+
+                    Text("Patient: \(senderDisplayName)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
 
-            // Card 2: Message Composer
+            // Card 2: Compose Message
             ThyroCard {
-                ThyroSectionTitle("Compose Message", subtitle: "Your message will pop up directly on the clinician's dashboard.")
+                ThyroSectionTitle("Compose Message", subtitle: "Send questions, symptom updates, or notes directly to your doctor.")
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Sender")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    HStack(spacing: 6) {
-                        Image(systemName: "person.crop.circle.fill")
-                            .foregroundStyle(ThyroUI.teal)
-                        Text(senderDisplayName)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(ThyroUI.navy)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(ThyroUI.softGray)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
-
+                // Subject Picker
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Subject / Category")
+                    Text("Subject")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
 
@@ -141,13 +146,15 @@ struct MessageClinicianPage: View {
                         }
                     }
                     .pickerStyle(.menu)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
+                    .tint(ThyroUI.navy)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
                     .background(ThyroUI.softGray)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
 
+                // Message Text Field
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Message Content")
                         .font(.caption.weight(.semibold))
@@ -214,9 +221,9 @@ struct MessageClinicianPage: View {
             // Medical Disclaimer
             ThyroMedicalDisclaimer()
 
-            // Card 3: Recent Message History
+            // Card 3: Care Conversation & Messages
             ThyroCard {
-                ThyroSectionTitle("Sent Message History", subtitle: "Log of messages sent to your clinician's care thread.")
+                ThyroSectionTitle("Care Conversation & Messages", subtitle: "Live exchange with your endocrinologist and care team.")
 
                 let list = allMessages
                 if list.isEmpty {
@@ -224,7 +231,7 @@ struct MessageClinicianPage: View {
                         Image(systemName: "bubble.left.and.bubble.right")
                             .font(.system(size: 32))
                             .foregroundStyle(.secondary.opacity(0.6))
-                        Text("No messages sent yet.")
+                        Text("No messages in care thread yet.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                         Text("Compose a message above to contact your clinician.")
@@ -235,36 +242,104 @@ struct MessageClinicianPage: View {
                     .padding(.vertical, 18)
                 } else {
                     ForEach(list) { item in
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text(item.subject)
-                                    .font(.subheadline.weight(.bold))
-                                    .foregroundStyle(ThyroUI.navy)
-                                Spacer()
-                                Text(item.formattedDate)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
+                        if item.isFromClinician {
+                            // CLINICIAN RESPONSE CARD
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(spacing: 8) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(ThyroUI.teal)
+                                            .frame(width: 30, height: 30)
+                                        Image(systemName: "stethoscope")
+                                            .font(.caption.weight(.bold))
+                                            .foregroundStyle(.white)
+                                    }
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(item.sender)
+                                            .font(.subheadline.weight(.bold))
+                                            .foregroundStyle(ThyroUI.navy)
+                                        Text("Endocrinologist · Clinical Team Response")
+                                            .font(.caption2.weight(.medium))
+                                            .foregroundStyle(ThyroUI.teal)
+                                    }
+                                    Spacer()
+                                    Text(item.formattedDate)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
 
-                            Text(item.body)
-                                .font(.footnote)
-                                .foregroundStyle(ThyroUI.ink)
+                                Text(item.body)
+                                    .font(.subheadline)
+                                    .foregroundStyle(ThyroUI.ink)
+                                    .padding(10)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(Color.white)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
 
-                            HStack(spacing: 4) {
-                                Image(systemName: "checkmark.seal.fill")
-                                    .font(.caption2)
-                                    .foregroundStyle(ThyroUI.teal)
-                                Text("Delivered to Clinician Dashboard")
-                                    .font(.caption2.weight(.medium))
-                                    .foregroundStyle(ThyroUI.teal)
+                                HStack(spacing: 4) {
+                                    Image(systemName: "checkmark.shield.fill")
+                                        .font(.caption2)
+                                        .foregroundStyle(ThyroUI.teal)
+                                    Text("Verified Clinical Team Response")
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(ThyroUI.teal)
+                                }
                             }
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(ThyroUI.mint.opacity(0.4))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(ThyroUI.teal.opacity(0.35), lineWidth: 1.5)
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                        } else {
+                            // PATIENT OUTGOING MESSAGE CARD
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: "person.circle.fill")
+                                            .foregroundStyle(ThyroUI.navy.opacity(0.65))
+                                        Text(item.sender)
+                                            .font(.subheadline.weight(.bold))
+                                            .foregroundStyle(ThyroUI.navy)
+                                    }
+                                    Spacer()
+                                    Text(item.formattedDate)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Text(item.body)
+                                    .font(.footnote)
+                                    .foregroundStyle(ThyroUI.ink)
+
+                                HStack(spacing: 4) {
+                                    Image(systemName: "checkmark.seal.fill")
+                                        .font(.caption2)
+                                        .foregroundStyle(ThyroUI.teal)
+                                    Text("Delivered to Clinician Dashboard")
+                                        .font(.caption2.weight(.medium))
+                                        .foregroundStyle(ThyroUI.teal)
+                                }
+                            }
+                            .padding(12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(ThyroUI.softGray)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
                         }
-                        .padding(12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(ThyroUI.softGray)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
                 }
+            }
+        }
+        .refreshable {
+            await store?.synchronize()
+        }
+        .task {
+            await store?.synchronize()
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 2_500_000_000)
+                await store?.synchronize()
             }
         }
     }
@@ -277,24 +352,7 @@ struct MessageClinicianPage: View {
         errorMessage = nil
         showSuccessBanner = false
 
-        let msgID = UUID().uuidString
         let patientName = store?.session?.user.name ?? "Eleanor Vance"
-        let newRecord = LocalMessageRecord(
-            id: msgID,
-            body: trimmed,
-            subject: selectedSubject,
-            sender: patientName,
-            timestamp: Date()
-        )
-
-        // Save into local cache
-        var currentCache = cachedMessages
-        currentCache.insert(newRecord, at: 0)
-        if let encoded = try? JSONEncoder().encode(currentCache),
-           let jsonStr = String(data: encoded, encoding: .utf8) {
-            localMessagesCache = jsonStr
-        }
-
         let fields: [String: String] = [
             "body": trimmed,
             "subject": selectedSubject,
@@ -303,23 +361,32 @@ struct MessageClinicianPage: View {
             "observedDate": ISO8601DateFormatter().string(from: Date())
         ]
 
-        // 1. Direct POST to demo patient p1 messages on backend
-        let directBase = store?.baseURL ?? URL(string: "http://localhost:8080")!
-        let directEndpoint = directBase.appendingPathComponent("v1/patients/p1/messages")
-        var directReq = URLRequest(url: directEndpoint)
-        directReq.httpMethod = "POST"
-        directReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let postBody: [String: Any] = [
-            "id": msgID,
-            "expectedVersion": 0,
-            "fields": fields
-        ]
-        directReq.httpBody = try? JSONSerialization.data(withJSONObject: postBody)
-        _ = try? await URLSession.shared.data(for: directReq)
-
-        // 2. Save through CareStore
         if let store {
-            _ = await store.save(kind: "messages", fields: fields)
+            // Send exactly once through CareStore sync
+            let success = await store.save(kind: "messages", fields: fields)
+            if !success {
+                errorMessage = store.errorMessage ?? "Could not send message."
+            }
+        } else {
+            // Direct POST fallback only if CareStore is not provided
+            #if targetEnvironment(simulator)
+            let primaryBase = URL(string: "http://localhost:8080")!
+            #else
+            let primaryBase = URL(string: "http://10.0.0.7:8080")!
+            #endif
+
+            let endpoint = primaryBase.appendingPathComponent("v1/patients/p1/messages")
+            var directReq = URLRequest(url: endpoint)
+            directReq.httpMethod = "POST"
+            directReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            directReq.timeoutInterval = 5.0
+            let postBody: [String: Any] = [
+                "id": UUID().uuidString,
+                "expectedVersion": 0,
+                "fields": fields
+            ]
+            directReq.httpBody = try? JSONSerialization.data(withJSONObject: postBody)
+            _ = try? await URLSession.shared.data(for: directReq)
         }
 
         isSending = false

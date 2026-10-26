@@ -25,7 +25,7 @@ struct CareSection<Content: View>: View {
 }
 
 struct CareRootView: View {
-    @State private var store = CareStore()
+    @State private var store = CareStore.shared
     @StateObject private var presentationIdentity = AuthManager()
     var body: some View {
         Group {
@@ -99,83 +99,257 @@ struct CareAccountView: View {
     }
 }
 
-struct CareTabs: View {
+/// Dedicated Daily Tasks screen shown when the user taps their profile or "Daily Tasks"
+struct DailyTasksView: View {
     let store: CareStore
-    @State private var selected = "today"
-    @State private var notificationRouter = CareNotificationRouter.shared
-    var body: some View {
-        TabView(selection: $selected) {
-            Tab("Today", systemImage: "sun.max", value: "today") {
-                NavigationStack { CareTodayView(store: store) }
-            }
-            Tab("Track", systemImage: "list.bullet.clipboard", value: "track") {
-                NavigationStack { CareTrackView(store: store) }
-            }
-            Tab("Meals", systemImage: "fork.knife", value: "meals") {
-                NavigationStack { CareRecordList(store: store, kind: "meals", title: "Meals") }
-            }
-            Tab("Trends", systemImage: "chart.xyaxis.line", value: "trends") {
-                NavigationStack { CareTrendsView(store: store) }
-            }
-            Tab("Care", systemImage: "bubble.left.and.bubble.right", value: "care") {
-                NavigationStack { CareCoordinationView(store: store) }
-            }
-        }
-        .sheet(isPresented: Binding(get: { store.showQuestionnaire }, set: { store.showQuestionnaire = $0 })) {
-            NavigationStack { QuestionairePage(store: store) }
-        }
-        .sheet(item: $notificationRouter.route) { route in
-            CareReminderDestination(store: store, route: route)
-        }
-        .task {
-            while !Task.isCancelled {
-                await store.synchronize()
-                try? await Task.sleep(for: .seconds(15))
-            }
-        }
-    }
-}
+    let onBackToHome: () -> Void
+    var onNavigateToTab: (AppTab.MainTab) -> Void = { _ in }
 
-struct CareTodayView: View {
-    let store: CareStore
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text(Date.now.formatted(date: .complete, time: .omitted)).foregroundStyle(.secondary)
-                CareSyncView(store: store)
-                CareSection(title: "Your questionnaire") {
-                    NavigationLink("Open questionnaire") { QuestionairePage(store: store) }
-                    NavigationLink("Explore simulated records") { CareSampleDataView() }
-                }
-                CareSection(title: "Today’s plan") {
-                    NavigationLink("Daily symptom check-in") { CareEntryView(store: store, kind: "symptoms") }
-                    NavigationLink("Weekly check-in") { CareEntryView(store: store, kind: "weekly-checkins") }
-                    NavigationLink("Record a meal") { CareEntryView(store: store, kind: "meals") }
-                    NavigationLink("Reminder center") { CareReminderCenter(store: store) }
-                    Text("Tasks are recorded only when you save an entry.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-                CareSection(title: "Latest labs") {
-                    if store.entries("labs").isEmpty {
-                        Text("No lab results recorded.")
-                        NavigationLink("Add your first lab result") { CareEntryView(store: store, kind: "labs") }
-                    } else {
-                        ForEach(Array(store.entries("labs").prefix(5))) { record in
-                            NavigationLink { CareRecordDetail(store: store, record: record) } label: { CareRecordRow(record: record) }
+        ZStack {
+            LinearGradient(
+                colors: [.white, ThyroUI.mint.opacity(0.4)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    // Top Bar with clear Back to Home button
+                    HStack {
+                        Button(action: onBackToHome) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "chevron.left")
+                                    .font(.subheadline.weight(.bold))
+                                Text("Back to Home")
+                                    .font(.subheadline.weight(.semibold))
+                            }
+                            .foregroundStyle(ThyroUI.teal)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(Color.white)
+                            .clipShape(Capsule())
+                            .shadow(color: ThyroUI.navy.opacity(0.08), radius: 6, x: 0, y: 2)
+                        }
+
+                        Spacer()
+
+                        NavigationLink {
+                            CareSettingsView(store: store)
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "gearshape.fill")
+                                Text("Settings")
+                            }
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(ThyroUI.navy)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(Color.white.opacity(0.9))
+                            .clipShape(Capsule())
+                            .shadow(color: ThyroUI.navy.opacity(0.06), radius: 4, x: 0, y: 1)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Daily Tasks")
+                            .font(.system(size: 32, weight: .bold))
+                            .foregroundStyle(ThyroUI.navy)
+                        Text(Date.now.formatted(date: .complete, time: .omitted))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    CareSyncView(store: store)
+
+                    // Today's Action Plan Card
+                    ThyroCard {
+                        ThyroSectionTitle("Today's Plan", subtitle: "Log daily thyroid parameters and stay on schedule.")
+
+                        VStack(spacing: 10) {
+                            NavigationLink {
+                                CareEntryView(store: store, kind: "symptoms")
+                            } label: {
+                                DailyTaskRow(
+                                    icon: "waveform.path.ecg",
+                                    color: ThyroUI.teal,
+                                    title: "Daily symptom check-in",
+                                    subtitle: "Energy, fatigue, cold sensitivity, pulse rate"
+                                )
+                            }
+
+                            Button {
+                                onNavigateToTab(.picture)
+                            } label: {
+                                DailyTaskRow(
+                                    icon: "fork.knife",
+                                    color: ThyroUI.amber,
+                                    title: "Record a meal & scan plate",
+                                    subtitle: "AI nutrition and thyroid micronutrient analysis"
+                                )
+                            }
+                            .buttonStyle(.plain)
+
+                            NavigationLink {
+                                CareReminderCenter(store: store)
+                            } label: {
+                                DailyTaskRow(
+                                    icon: "pills.fill",
+                                    color: ThyroUI.violet,
+                                    title: "Medication adherence & reminders",
+                                    subtitle: "Levothyroxine timing, fasting window, alerts"
+                                )
+                            }
+
+                            NavigationLink {
+                                CareEntryView(store: store, kind: "weekly-checkins")
+                            } label: {
+                                DailyTaskRow(
+                                    icon: "calendar.badge.clock",
+                                    color: ThyroUI.coral,
+                                    title: "Weekly check-in",
+                                    subtitle: "Comprehensive 7-day retrospective"
+                                )
+                            }
+                        }
+                    }
+
+                    // Questionnaire Card
+                    ThyroCard {
+                        ThyroSectionTitle("ThyroCare Questionnaire", subtitle: "Assess symptoms and compute composite clinical severity.")
+
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Complete Symptom Questionnaire")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(ThyroUI.navy)
+                                Text("Calculates composite score, TSH shifts, and care summary.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+
+                            Button {
+                                onNavigateToTab(.questionaire)
+                            } label: {
+                                Text("Open")
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                    .background(ThyroUI.teal)
+                                    .clipShape(Capsule())
+                            }
+                        }
+                    }
+
+                    // Latest Labs Card
+                    ThyroCard {
+                        ThyroSectionTitle("Latest Labs", subtitle: "Tracked thyroid blood panels (TSH, Free T4, Free T3).")
+
+                        if store.entries("labs").isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("No recent lab records on device.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                NavigationLink {
+                                    CareEntryView(store: store, kind: "labs")
+                                } label: {
+                                    Label("Add lab result", systemImage: "plus.circle.fill")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(ThyroUI.teal)
+                                }
+                            }
+                        } else {
+                            VStack(spacing: 8) {
+                                ForEach(Array(store.entries("labs").prefix(4))) { record in
+                                    NavigationLink {
+                                        CareRecordDetail(store: store, record: record)
+                                    } label: {
+                                        CareRecordRow(record: record)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Care Updates Card
+                    ThyroCard {
+                        ThyroSectionTitle("Care Updates", subtitle: "Communication with your endocrine care team.")
+
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("\(store.entries("messages").count) messages · \(store.entries("notes").count) clinical notes")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(ThyroUI.navy)
+                                Text("Direct messaging channel with your clinician.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+
+                            Button {
+                                onNavigateToTab(.messages)
+                            } label: {
+                                Label("Messages", systemImage: "message.fill")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(ThyroUI.navy)
+                                    .clipShape(Capsule())
+                            }
                         }
                     }
                 }
-                CareSection(title: "Care updates") {
-                    Text("\(store.entries("messages").count) saved messages · \(store.entries("notes").count) shared notes")
-                    NavigationLink("View appointments") { CareRecordList(store: store, kind: "appointments", title: "Appointments") }
-                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 16)
             }
-            .padding(.horizontal, 20).padding(.vertical, 16)
         }
-        .background(CarePalette.canvas)
-        .navigationTitle("Today")
-        .toolbar { NavigationLink { CareSettingsView(store: store) } label: { Label("Profile and settings", systemImage: "person.crop.circle") } }
+        .navigationBarHidden(true)
         .refreshable { await store.synchronize() }
+    }
+}
+
+struct DailyTaskRow: View {
+    let icon: String
+    let color: Color
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(color.opacity(0.14))
+                    .frame(width: 40, height: 40)
+                Image(systemName: icon)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(color)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(ThyroUI.navy)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.secondary.opacity(0.7))
+        }
+        .padding(10)
+        .background(Color.white.opacity(0.6))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 
@@ -195,31 +369,6 @@ struct CareSyncView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-struct CareTrackView: View {
-    let store: CareStore
-    var body: some View {
-        List {
-            Section("Getting started") {
-                NavigationLink("Questionnaire") { QuestionairePage(store: store) }
-                NavigationLink("Simulated sample data") { CareSampleDataView() }
-            }
-            Section("Record types") {
-                NavigationLink("Lab reports") { CareRecordList(store: store, kind: "labs", title: "Lab reports") }
-                NavigationLink("Daily symptoms") { CareRecordList(store: store, kind: "symptoms", title: "Daily symptoms") }
-                NavigationLink("Weekly check-ins") { CareRecordList(store: store, kind: "weekly-checkins", title: "Weekly check-ins") }
-                NavigationLink("Medicines and supplements") { CareRecordList(store: store, kind: "medications", title: "Medicines and supplements") }
-                NavigationLink("Body measurements and vitals") { CareRecordList(store: store, kind: "vitals", title: "Vitals") }
-            }
-            Section("Recent records") {
-                ForEach(Array(store.records.sorted { $0.recordedAt > $1.recordedAt }.prefix(20))) { record in
-                    NavigationLink { CareRecordDetail(store: store, record: record) } label: { CareRecordRow(record: record) }
-                }
-            }
-        }
-        .navigationTitle("Track")
     }
 }
 
@@ -248,85 +397,76 @@ struct CareRecordList: View {
                 Section { Text("Save a meal description and an optional confirmed photo. Nutrient analysis is not yet connected.") }
             }
             if store.entries(kind).isEmpty {
-                ContentUnavailableView("No records yet", systemImage: "tray", description: Text("Saved records will appear here with their dates and sources."))
-            }
-            ForEach(store.entries(kind)) { record in
-                NavigationLink { CareRecordDetail(store: store, record: record) } label: { CareRecordRow(record: record) }
-            }
-            Section("Waiting to sync") {
-                ForEach(store.pending.filter { $0.kind == kind }) { draft in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(draft.fields["analyte"] ?? draft.fields["name"] ?? draft.fields["description"] ?? draft.fields["body"] ?? "Saved entry")
-                        Text("Saved on device").font(.footnote).foregroundStyle(.secondary)
-                        if let server = store.records.first(where: { $0.id == draft.id && $0.version > draft.expectedVersion }) {
-                            Text("A server version exists. Review it before discarding or re-entering your pending correction.")
-                                .font(.footnote)
-                            NavigationLink("Review server version") { CareRecordDetail(store: store, record: server) }
-                        } else {
-                            NavigationLink("Review or correct device entry") {
-                                CareEntryView(store: store, kind: kind, correcting: PatientRecord(id: draft.id, patientID: draft.patientID, kind: draft.kind, version: draft.expectedVersion, recordedAt: "", authorID: draft.patientID, fields: draft.fields))
-                            }
-                        }
-                    }
-                    .swipeActions {
-                        Button("Discard device entry", role: .destructive) { store.discardPending(draft) }
-                    }
+                Section { Text("No records saved yet.") }
+            } else {
+                ForEach(store.entries(kind)) { record in
+                    NavigationLink { CareRecordDetail(store: store, record: record) } label: { CareRecordRow(record: record) }
                 }
             }
         }
         .navigationTitle(title)
         .toolbar {
-            if !["notes", "appointments"].contains(kind) {
-                NavigationLink { CareEntryView(store: store, kind: kind) } label: { Label("Add", systemImage: "plus") }
+            if !["messages", "notes", "questionnaire"].contains(kind) {
+                NavigationLink("Add") { CareEntryView(store: store, kind: kind) }
             }
         }
-        .refreshable { await store.synchronize() }
+    }
+}
+
+struct CareMealRecordPhoto: View {
+    let store: CareStore
+    let record: PatientRecord
+    @State private var imageData: Data?
+    @State private var isLoading = true
+
+    var body: some View {
+        Group {
+            if let imageData, let uiImage = UIImage(data: imageData) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else if isLoading {
+                ProgressView("Loading photo…")
+            } else {
+                Text("Photo unavailable on this device.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .task {
+            isLoading = true
+            imageData = try? await store.mealPhoto(record)
+            isLoading = false
+        }
     }
 }
 
 struct CareRecordDetail: View {
     let store: CareStore
     let record: PatientRecord
-    @State private var analysisBusy = false
-    @State private var analysisMessage: String?
-    @State private var confirmAnalysis = false
     var body: some View {
         List {
-            if record.kind == "meals" {
-                Section("Meal analysis") {
-                    Button(analysisBusy ? "Analyzing meal…" : "Analyze meal with AI") { confirmAnalysis = true }
-                        .disabled(analysisBusy)
-                    if let analysisMessage { Text(analysisMessage) }
-                }
-                .alert("Analyze this photo?", isPresented: $confirmAnalysis) {
-                    Button("Cancel", role: .cancel) { }
-                    Button("Share photo and analyze") {
-                        Task {
-                            analysisBusy = true
-                            defer { analysisBusy = false }
-                            do {
-                                let result = try await store.analyzeMeal(record)
-                                analysisMessage = result.fields["analysisStatus"] == "complete"
-                                    ? (result.fields["summary"] ?? "Analysis saved.") + "\nEstimated kcal: " + (result.fields["estimatedCaloriesKcal"] ?? "Not available")
-                                    : result.fields["analysisError"]
-                            } catch { analysisMessage = error.localizedDescription }
-                        }
+            Section("Record") {
+                LabeledContent("Kind", value: record.kind)
+                LabeledContent("Observed", value: record.observationDate)
+                if let collected = record.fields["collectedDate"] { LabeledContent("Collected", value: collected) }
+            }
+            if let body = record.fields["body"], !body.isEmpty {
+                Section("Notes") { Text(body) }
+            }
+            if let result = record.fields["result"], !result.isEmpty {
+                Section("Result") {
+                    Text("\(result) \(record.fields["unit"] ?? "")").font(.title).monospacedDigit()
+                    if let lower = record.fields["referenceLower"], let upper = record.fields["referenceUpper"], !upper.isEmpty {
+                        Text("Reference interval: \(lower.isEmpty ? "—" : lower) to \(upper)")
+                            .font(.footnote).foregroundStyle(.secondary)
                     }
-                } message: {
-                    Text("Your meal photo will be sent to Google Gemini to identify foods. Food search terms are sent to USDA for nutrient estimates. Your name and other health records are not included. You can cancel and log manually.")
                 }
             }
-            if record.kind == "meals", record.fields["hasPhoto"] == "true" {
-                Section("Confirmed meal photo") { CareMealPhotoView(store: store, record: record) }
-            }
-            Section("Entered information") {
-                ForEach(record.fields.keys.sorted(), id: \.self) { key in
-                    if let value = record.fields[key], !value.isEmpty {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(CareField.label(key)).font(.caption).foregroundStyle(.secondary)
-                            Text(value).textSelection(.enabled)
-                        }
-                    }
+            if let photo = record.fields["mealPhotoRelativePath"], !photo.isEmpty {
+                Section("Meal photo") {
+                    CareMealRecordPhoto(store: store, record: record)
                 }
             }
             Section("Record provenance") {
@@ -340,134 +480,6 @@ struct CareRecordDetail: View {
             }
         }
         .navigationTitle(record.title)
-    }
-}
-
-struct CareTrendsView: View {
-    let store: CareStore
-    @State private var analyte = "TSH"
-    @State private var unit = "mIU/L"
-    var body: some View {
-        List {
-            Section {
-                Picker("Analyte", selection: $analyte) {
-                    ForEach(CareField.analytes, id: \.self) { Text($0) }
-                }
-                .onChange(of: analyte) { _, value in unit = CareField.units[value]?.first ?? "" }
-                Picker("Report unit", selection: $unit) {
-                    ForEach(CareField.units[analyte] ?? [], id: \.self) { Text($0) }
-                }
-            }
-            CareLabChart(records: store.entries("labs").filter { $0.fields["analyte"] == analyte && $0.fields["unit"] == unit }, unit: unit)
-            Section("Symptoms") {
-                NavigationLink("Daily and weekly symptom trends") { CareSymptomTrends(store: store) }
-            }
-            Section("Model availability") {
-                Text("Individual symptom-to-hormone and meal-to-hormone forecasting is not validated. No forecast is calculated.")
-                Text("Charts show measured results only. Censored results and missing collection dates remain in the data list and are not plotted as exact measurements.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-        }.navigationTitle("Trends")
-    }
-}
-
-struct CareLabChart: View {
-    let records: [PatientRecord]
-    let unit: String
-    @State private var selectedDate: Date?
-    var points: [LabPoint] {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        return records.compactMap { record in
-            guard let text = record.fields["result"], let value = Double(text), value.isFinite,
-                  let dateText = record.fields["collectedDate"], let date = formatter.date(from: dateText) else { return nil }
-            return LabPoint(id: record.id, date: date, value: value)
-        }.sorted { $0.date < $1.date }
-    }
-    var body: some View {
-        Section("Measured results · \(unit)") {
-            if points.isEmpty { Text("No exact results with collection dates to plot.") }
-            else {
-                Chart(points) { point in
-                    PointMark(x: .value("Collection date", point.date), y: .value(unit, point.value))
-                        .accessibilityLabel(point.date.formatted(date: .abbreviated, time: .omitted))
-                        .accessibilityValue("\(point.value) \(unit)")
-                }
-                .chartXSelection(value: $selectedDate)
-                .frame(height: 240)
-                if let selectedDate, let point = points.min(by: { abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate)) }) {
-                    Text("\(point.date.formatted(date: .abbreviated, time: .omitted)): \(point.value.formatted()) \(unit)")
-                        .monospacedDigit()
-                }
-            }
-            ForEach(records) { record in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("\(record.fields["result"] ?? "") \(unit) · \(record.observationDate)")
-                    Text("Report interval: \(record.fields["referenceLower"].flatMap { $0.isEmpty ? nil : $0 } ?? "Not supplied") – \(record.fields["referenceUpper"] ?? "")")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-}
-struct LabPoint: Identifiable {
-    let id: String
-    let date: Date
-    let value: Double
-}
-
-struct CareCoordinationView: View {
-    let store: CareStore
-    var body: some View {
-        List {
-            Section("Care team") {
-                if store.careTeam.isEmpty { Text("No care team connected.") }
-                ForEach(store.careTeam) { person in Text(person.name) }
-                NavigationLink("Connect care team") { CareConnectionView(store: store) }
-            }
-            Section("Communication") {
-                NavigationLink("Messages") { CareRecordList(store: store, kind: "messages", title: "Messages") }
-                NavigationLink("Request information from my clinician") { CareRecordList(store: store, kind: "requests", title: "Information requests") }
-                Text("Messages are shared with your connected care team. Response times must be confirmed with your practice. This inbox is not an emergency service.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-            Section("Your care records") {
-                NavigationLink("Shared notes") { CareRecordList(store: store, kind: "notes", title: "Shared notes") }
-                NavigationLink("Appointments") { CareRecordList(store: store, kind: "appointments", title: "Appointments") }
-            }
-        }.navigationTitle("Care")
-    }
-}
-
-struct CareConnectionView: View {
-    let store: CareStore
-    @State private var code = ""
-    @State private var clinician: PatientIdentity?
-    @State private var error: String?
-    var body: some View {
-        Form {
-            TextField("Invitation code", text: $code).textInputAutocapitalization(.never).autocorrectionDisabled()
-                .onChange(of: code) { _, _ in clinician = nil }
-            Button("Review invitation") {
-                Task {
-                    do { clinician = try await store.previewInvitation(code); error = nil }
-                    catch { self.error = error.localizedDescription }
-                }
-            }
-            if let clinician {
-                Text("Connect with \(clinician.name)")
-                Text("This grants access to all your care records, including meals, symptoms, messages and patient-visible notes. You can revoke access in Settings.")
-                Button("Confirm connection") {
-                    Task {
-                        do { try await store.acceptInvitation(code); self.clinician = nil; code = "" }
-                        catch { self.error = error.localizedDescription }
-                    }
-                }
-            }
-            if let error { Text(error).foregroundStyle(.red) }
-        }.navigationTitle("Connect care team")
     }
 }
 

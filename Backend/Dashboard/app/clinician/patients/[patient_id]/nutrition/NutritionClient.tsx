@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import PatientWorkspaceLayout from "@/components/PatientWorkspaceLayout";
 import { getPatientById } from "@/lib/demoData";
+import { careAPI, CareRecord } from "@/lib/care-api";
 import { 
   Utensils, 
   Info, 
@@ -17,85 +18,232 @@ import {
   Sliders 
 } from "lucide-react";
 
+interface ScannedMeal {
+  food: string;
+  date: string;
+  image?: string;
+  confidence: number;
+  usdaMatchName: string;
+  usdaFdcId: string;
+  usdaDataType: string;
+  usdaQuery: string;
+  latencyMs: number;
+  iodine: string;
+  selenium: string;
+  calcium: string;
+  sodium: string;
+  tshShift: string;
+  t3Shift: string;
+  t4Shift: string;
+  tshStatus: string;
+  t3Status: string;
+  t4Status: string;
+  levoRisk: string;
+  jsonPayload: string;
+  calories?: string | number;
+  protein?: number;
+  carbs?: number;
+  vitamins?: number;
+  produce?: number;
+}
+
+const DEFAULT_SCANNED_MEALS: ScannedMeal[] = [
+  {
+    food: "Grilled Chicken & Brown Rice Bowl",
+    date: "2026-09-24 12:45",
+    confidence: 0.94,
+    usdaMatchName: "Chicken breast, grilled with brown rice & steamed broccoli",
+    usdaFdcId: "171077",
+    usdaDataType: "SR Legacy",
+    usdaQuery: "chicken breast rice broccoli",
+    latencyMs: 142,
+    iodine: "14.2 µg",
+    selenium: "36.5 µg",
+    calcium: "48 mg",
+    sodium: "410 mg",
+    tshShift: "-1.8%",
+    t3Shift: "+3.2%",
+    t4Shift: "+2.4%",
+    tshStatus: "Favorable Support",
+    t3Status: "+3.2% Support",
+    t4Status: "+2.4% Support",
+    levoRisk: "Moderate — Enforce 4-hour window from dose",
+    jsonPayload: JSON.stringify({
+      foodSearchCriteria: { query: "grilled chicken bowl", pageNumber: 1 },
+      totalHits: 42,
+      foods: [{
+        fdcId: 171077,
+        description: "Chicken breast, grilled with brown rice & steamed broccoli",
+        dataType: "SR Legacy",
+        foodNutrients: [
+          { nutrientName: "Protein", value: 33.8, unitName: "G" },
+          { nutrientName: "Selenium, Se", value: 36.5, unitName: "UG" },
+          { nutrientName: "Iodine, I", value: 14.2, unitName: "UG" }
+        ]
+      }]
+    }, null, 2)
+  },
+  {
+    food: "Wild Alaskan Salmon & Quinoa",
+    date: "2026-09-22 18:30",
+    confidence: 0.96,
+    usdaMatchName: "Salmon, wild, cooked, dry heat with quinoa",
+    usdaFdcId: "175168",
+    usdaDataType: "Foundation Foods",
+    usdaQuery: "wild salmon quinoa",
+    latencyMs: 118,
+    iodine: "38.5 µg",
+    selenium: "52.4 µg",
+    calcium: "22 mg",
+    sodium: "115 mg",
+    tshShift: "-3.4%",
+    t3Shift: "+5.8%",
+    t4Shift: "+4.2%",
+    tshStatus: "Strong Support",
+    t3Status: "+5.8% Support",
+    t4Status: "+4.2% Support",
+    levoRisk: "Low Risk — Minimal GI Binding",
+    jsonPayload: JSON.stringify({
+      foodSearchCriteria: { query: "wild salmon quinoa", pageNumber: 1 },
+      totalHits: 18,
+      foods: [{
+        fdcId: 175168,
+        description: "Salmon, wild, cooked, dry heat with quinoa",
+        dataType: "Foundation Foods",
+        foodNutrients: [
+          { nutrientName: "Protein", value: 41.5, unitName: "G" },
+          { nutrientName: "Selenium, Se", value: 52.4, unitName: "UG" }
+        ]
+      }]
+    }, null, 2)
+  }
+];
+
 export default function NutritionClient({ patientId }: { patientId: string }) {
   const patient = getPatientById(patientId);
   const [showDetailed, setShowDetailed] = useState(true);
+  const [scannedMeals, setScannedMeals] = useState<ScannedMeal[]>(DEFAULT_SCANNED_MEALS);
   const [selectedScanIdx, setSelectedScanIdx] = useState(0);
   const [copiedJson, setCopiedJson] = useState(false);
 
-  const scannedMeals = [
-    {
-      food: "Grilled Chicken & Brown Rice Bowl",
-      date: "2026-09-24 12:45",
-      confidence: 0.94,
-      usdaMatchName: "Chicken breast, grilled with brown rice & steamed broccoli",
-      usdaFdcId: "171077",
-      usdaDataType: "SR Legacy",
-      usdaQuery: "chicken breast rice broccoli",
-      latencyMs: 142,
-      iodine: "14.2 µg",
-      selenium: "36.5 µg",
-      calcium: "48 mg",
-      sodium: "410 mg",
-      tshShift: "-1.8%",
-      t3Shift: "+3.2%",
-      t4Shift: "+2.4%",
-      tshStatus: "Favorable Support",
-      t3Status: "+3.2% Support",
-      t4Status: "+2.4% Support",
-      levoRisk: "Moderate — Enforce 4-hour window from dose",
-      jsonPayload: JSON.stringify({
-        foodSearchCriteria: { query: "grilled chicken bowl", pageNumber: 1 },
-        totalHits: 42,
-        foods: [{
-          fdcId: 171077,
-          description: "Chicken breast, grilled with brown rice & steamed broccoli",
-          dataType: "SR Legacy",
-          foodNutrients: [
-            { nutrientName: "Protein", value: 33.8, unitName: "G" },
-            { nutrientName: "Selenium, Se", value: 36.5, unitName: "UG" },
-            { nutrientName: "Iodine, I", value: 14.2, unitName: "UG" }
-          ]
-        }]
-      }, null, 2)
-    },
-    {
-      food: "Wild Alaskan Salmon & Quinoa",
-      date: "2026-09-22 18:30",
-      confidence: 0.96,
-      usdaMatchName: "Salmon, wild, cooked, dry heat with quinoa",
-      usdaFdcId: "175168",
-      usdaDataType: "Foundation Foods",
-      usdaQuery: "wild salmon quinoa",
-      latencyMs: 118,
-      iodine: "38.5 µg",
-      selenium: "52.4 µg",
-      calcium: "22 mg",
-      sodium: "115 mg",
-      tshShift: "-3.4%",
-      t3Shift: "+5.8%",
-      t4Shift: "+4.2%",
-      tshStatus: "Strong Support",
-      t3Status: "+5.8% Support",
-      t4Status: "+4.2% Support",
-      levoRisk: "Low Risk — Minimal GI Binding",
-      jsonPayload: JSON.stringify({
-        foodSearchCriteria: { query: "wild salmon quinoa", pageNumber: 1 },
-        totalHits: 18,
-        foods: [{
-          fdcId: 175168,
-          description: "Salmon, wild, cooked, dry heat with quinoa",
-          dataType: "Foundation Foods",
-          foodNutrients: [
-            { nutrientName: "Protein", value: 41.5, unitName: "G" },
-            { nutrientName: "Selenium, Se", value: 52.4, unitName: "UG" }
-          ]
-        }]
-      }, null, 2)
-    }
-  ];
+  useEffect(() => {
+    let isMounted = true;
 
-  const currentScan = scannedMeals[selectedScanIdx];
+    const fetchLiveMeals = async () => {
+      try {
+        const cleanPid = (patientId || "p1").toLowerCase();
+        const liveList: ScannedMeal[] = [];
+
+        // 1. Fetch from /analyses?patientId=${patientId}
+        try {
+          const res = await fetch(`/analyses?patientId=${encodeURIComponent(patientId)}`, { cache: "no-store" });
+          if (res.ok) {
+            const raw = await res.json();
+            if (Array.isArray(raw)) {
+              for (const item of raw) {
+                if (!item || !item.analysis) continue;
+                const p = (item.patientId || "p1").toLowerCase();
+                const matches = p === cleanPid || (cleanPid === "p1" && (p === "p1" || p === "p-1001"));
+                if (!matches) continue;
+
+                const a = item.analysis;
+                const dateLabel = item.timestamp || a.timeLabel || "Recently Scanned";
+                liveList.push({
+                  food: a.name || "Scanned Food",
+                  date: dateLabel,
+                  image: item.imagePath || undefined,
+                  confidence: a.confidence ?? 0.92,
+                  usdaMatchName: a.usdaMatchName || a.name || "USDA Assayed Food",
+                  usdaFdcId: a.usdaFdcId || "Pending",
+                  usdaDataType: a.usdaDataType || "SR Legacy",
+                  usdaQuery: a.usdaQuery || a.name || "",
+                  latencyMs: a.usdaApiCallLatencyMs || 135,
+                  iodine: a.iodineMicrograms !== undefined ? `${a.iodineMicrograms} µg` : "0.0 µg",
+                  selenium: a.seleniumMicrograms !== undefined ? `${a.seleniumMicrograms} µg` : "0.0 µg",
+                  calcium: a.calciumMilligrams !== undefined ? `${a.calciumMilligrams} mg` : "0 mg",
+                  sodium: a.sodiumMilligrams !== undefined ? `${a.sodiumMilligrams} mg` : "0 mg",
+                  tshShift: `${(a.tshPercentChange ?? 0) >= 0 ? "+" : ""}${a.tshPercentChange ?? 0}%`,
+                  t3Shift: `${(a.t3PercentChange ?? 0) >= 0 ? "+" : ""}${a.t3PercentChange ?? 0}%`,
+                  t4Shift: `${(a.t4PercentChange ?? 0) >= 0 ? "+" : ""}${a.t4PercentChange ?? 0}%`,
+                  tshStatus: a.tshImpact || "Favorable Support",
+                  t3Status: a.t3Impact || "+0.0% Support",
+                  t4Status: a.t4Impact || "+0.0% Support",
+                  levoRisk: (a.calciumMilligrams ?? 0) > 200 ? "Moderate — Enforce 4-hour window from dose" : "Low Risk — Minimal GI Binding",
+                  jsonPayload: a.rawUsdaJsonResponse || JSON.stringify(a, null, 2),
+                  calories: a.estimatedCalories,
+                  protein: a.protein,
+                  carbs: a.carbs,
+                  vitamins: a.vitamins,
+                  produce: a.produce
+                });
+              }
+            }
+          }
+        } catch {}
+
+        // 2. Fetch from care records for kind=meals
+        try {
+          const records = await careAPI<CareRecord[]>(`patients/${patientId}/meals`);
+          if (Array.isArray(records)) {
+            for (const r of records) {
+              const f = r.fields || {};
+              const foodName = f.description || f.name || "Scanned Meal";
+              const dateLabel = (f.observedDate && f.mealTime) ? `${f.observedDate} ${f.mealTime}` : (f.observedDate || "Recently Saved");
+              
+              // Prevent duplicates if already in liveList
+              if (liveList.some(m => m.food === foodName && m.date === dateLabel)) continue;
+
+              liveList.push({
+                food: foodName,
+                date: dateLabel,
+                image: f.imageURL || undefined,
+                confidence: f.confidence ? parseFloat(f.confidence) : 0.95,
+                usdaMatchName: f.usdaMatchName || f.usdaMatch || foodName,
+                usdaFdcId: f.usdaFdcId || "Pending",
+                usdaDataType: f.usdaDataType || "Foundation Foods",
+                usdaQuery: f.usdaQuery || foodName,
+                latencyMs: f.latencyMs ? parseInt(f.latencyMs) : 120,
+                iodine: f.iodine || "0.0 µg",
+                selenium: f.selenium || "0.0 µg",
+                calcium: f.calcium || "0 mg",
+                sodium: f.sodium || "0 mg",
+                tshShift: f.tshShift || "0.0%",
+                t3Shift: f.t3Shift || "0.0%",
+                t4Shift: f.t4Shift || "0.0%",
+                tshStatus: f.tshStatus || "Favorable Support",
+                t3Status: f.t3Status || "0.0% Support",
+                t4Status: f.t4Status || "0.0% Support",
+                levoRisk: f.levoRisk || "Low Risk — Minimal GI Binding",
+                jsonPayload: f.jsonPayload || JSON.stringify(f, null, 2),
+                calories: f.calories,
+                protein: f.protein ? parseInt(f.protein) : undefined,
+                carbs: f.carbs ? parseInt(f.carbs) : undefined,
+                vitamins: f.vitamins ? parseInt(f.vitamins) : undefined,
+                produce: f.produce ? parseInt(f.produce) : undefined
+              });
+            }
+          }
+        } catch {}
+
+        if (isMounted) {
+          if (liveList.length > 0) {
+            setScannedMeals([...liveList, ...DEFAULT_SCANNED_MEALS]);
+          } else {
+            setScannedMeals(DEFAULT_SCANNED_MEALS);
+          }
+        }
+      } catch {}
+    };
+
+    void fetchLiveMeals();
+    const interval = setInterval(() => void fetchLiveMeals(), 3000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [patientId]);
+
+  const currentScan = scannedMeals[selectedScanIdx] || scannedMeals[0] || DEFAULT_SCANNED_MEALS[0];
 
   const handleCopyJson = () => {
     navigator.clipboard.writeText(currentScan.jsonPayload);
@@ -162,18 +310,19 @@ export default function NutritionClient({ patientId }: { patientId: string }) {
             </div>
 
             {/* Selector strip */}
-            <div className="flex space-x-3">
+            <div className="flex flex-wrap gap-2">
               {scannedMeals.map((scan, idx) => (
                 <button
                   key={idx}
                   onClick={() => setSelectedScanIdx(idx)}
-                  className={`px-3 py-2 text-xs font-bold rounded border transition-colors ${
+                  className={`px-3 py-2 text-xs font-bold rounded border transition-colors flex items-center space-x-1.5 ${
                     selectedScanIdx === idx
                       ? "bg-teal-600 text-white border-teal-700 shadow-xs"
                       : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
                   }`}
                 >
-                  {scan.food} ({scan.date})
+                  {scan.image && <Camera className="w-3.5 h-3.5 shrink-0 text-teal-300" />}
+                  <span>{scan.food} ({scan.date})</span>
                 </button>
               ))}
             </div>
@@ -190,10 +339,23 @@ export default function NutritionClient({ patientId }: { patientId: string }) {
                   </span>
                 </div>
 
+                {currentScan.image && (
+                  <div className="relative rounded-lg overflow-hidden border border-slate-200 aspect-video max-h-48 bg-slate-900 mb-2">
+                    <img src={currentScan.image} alt={currentScan.food} className="w-full h-full object-cover" />
+                    <div className="absolute bottom-2 left-2 bg-slate-950/80 backdrop-blur-xs px-2 py-1 rounded text-white text-[10px] font-mono flex items-center space-x-1.5">
+                      <Camera className="w-3 h-3 text-teal-400" />
+                      <span>ThyroCare Photo Scan</span>
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-1.5">
                   <p><strong className="text-slate-600">FDC Description:</strong> <span className="text-slate-900 font-semibold">{currentScan.usdaMatchName}</span></p>
                   <p><strong className="text-slate-600">FDC ID:</strong> <span className="font-mono text-teal-700 font-bold">#{currentScan.usdaFdcId}</span> | <strong>Type:</strong> {currentScan.usdaDataType}</p>
                   <p><strong className="text-slate-600">Submitted Query:</strong> <span className="font-mono text-slate-800">&quot;{currentScan.usdaQuery}&quot;</span></p>
+                  {currentScan.calories !== undefined && (
+                    <p><strong className="text-slate-600">Estimated Energy:</strong> <span className="font-mono text-slate-900 font-bold">{currentScan.calories} kcal</span></p>
+                  )}
                 </div>
 
                 <div className="pt-2 border-t border-slate-200">

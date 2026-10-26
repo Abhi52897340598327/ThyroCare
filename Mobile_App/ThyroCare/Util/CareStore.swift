@@ -53,6 +53,8 @@ private struct PatientCache: Codable {
 
 @MainActor @Observable
 final class CareStore {
+    static let shared = CareStore()
+
     // Default demo identity ensuring full functionality without sign-in barriers
     static let demoPatient = PatientIdentity(id: "p1", name: "Eleanor Vance", role: "patient")
     static let demoClinician = PatientIdentity(id: "c1", name: "Dr. Jane Smith (Endocrinology)", role: "clinician")
@@ -87,10 +89,10 @@ final class CareStore {
         let configurationKey = "ThyroCareBackendBaseURL"
         #endif
         if let value = Bundle.main.object(forInfoDictionaryKey: configurationKey) as? String,
-           let url = URL(string: value), url.scheme == "https" || (url.scheme == "http" && url.host == "localhost") {
+           let url = URL(string: value), url.scheme == "https" || url.scheme == "http" {
             return url
         }
-        return URL(string: "http://localhost:8080")
+        return URL(string: "http://10.0.0.7:8080")
     }
 
     var questionnaireRecord: PatientRecord? {
@@ -235,6 +237,7 @@ final class CareStore {
             syncLabel = pending.isEmpty ? "Synced at " + Date().formatted(date: .omitted, time: .shortened) : "Saved on device · Some entries need sync or correction"
             errorMessage = writeError
             await reminders.reconcile(patientID: activeSession.user.id, records: records)
+            await notifyNewClinicianMessages(records: records)
         } catch {
             guard currentGeneration == generation else { return }
             syncLabel = pending.isEmpty ? "Sync failed · Showing saved records" : "Saved on device · Sync failed"
@@ -365,6 +368,46 @@ final class CareStore {
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess, let data = item as? Data else { throw CareClientError.keychain(status) }
         return data
+    }
+
+    private func notifyNewClinicianMessages(records: [PatientRecord]) async {
+        let notifiedKey = "thyrocare_notified_clinician_msg_ids"
+        var notifiedIDs = Set(UserDefaults.standard.stringArray(forKey: notifiedKey) ?? [])
+
+        let clinicianMessages = records.filter {
+            $0.kind == "messages" &&
+            ($0.fields["authorRole"] == "clinician" || ($0.fields["sender"]?.contains("Dr.") ?? false))
+        }
+
+        for msg in clinicianMessages {
+            if !notifiedIDs.contains(msg.id) {
+                notifiedIDs.insert(msg.id)
+                UserDefaults.standard.set(Array(notifiedIDs), forKey: notifiedKey)
+
+                let sender = msg.fields["sender"] ?? "Dr. Jane Smith (Endocrinology)"
+                let body = msg.fields["body"] ?? "You have a new message from your doctor."
+                let subject = msg.fields["subject"] ?? "Clinical Response"
+
+                let content = UNMutableNotificationContent()
+                content.title = "Message from \(sender)"
+                content.subtitle = subject
+                content.body = body
+                content.sound = .default
+                content.userInfo = ["messageID": msg.id, "kind": "messages"]
+
+                let request = UNNotificationRequest(
+                    identifier: "clinician-msg-\(msg.id)",
+                    content: content,
+                    trigger: nil
+                )
+
+                do {
+                    try await UNUserNotificationCenter.current().add(request)
+                } catch {
+                    print("Failed to schedule notification: \(error)")
+                }
+            }
+        }
     }
 
     private func persistCache() throws {

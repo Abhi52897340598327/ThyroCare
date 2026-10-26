@@ -1,6 +1,8 @@
 import SwiftUI
 import Observation
 import UserNotifications
+import AVFoundation
+import UIKit
 
 struct CareNotificationRoute: Identifiable {
     let id: String
@@ -17,14 +19,154 @@ final class CareNotificationRouter {
     var route: CareNotificationRoute?
 }
 
+@MainActor
+final class CareBackgroundSyncManager: NSObject {
+    static let shared = CareBackgroundSyncManager()
+
+    private var audioPlayer: AVAudioPlayer?
+    private var isRunning = false
+    private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
+    private var pollTask: Task<Void, Never>?
+
+    private override init() {
+        super.init()
+        setupAudioSession()
+        setupAudioPlayer()
+        setupLifecycleObservers()
+    }
+
+    func start() {
+        guard !isRunning else { return }
+        isRunning = true
+        startPolling()
+    }
+
+    private func setupAudioSession() {
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("Background audio session config: \(error)")
+        }
+    }
+
+    private func setupAudioPlayer() {
+        let wavData = Self.createSilentWavData()
+        do {
+            let player = try AVAudioPlayer(data: wavData)
+            player.numberOfLoops = -1
+            player.volume = 0.0 // 100% silent, completely imperceptible
+            player.prepareToPlay()
+            self.audioPlayer = player
+        } catch {
+            print("Failed to initialize background player: \(error)")
+        }
+    }
+
+    private func setupLifecycleObservers() {
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleDidEnterBackground()
+        }
+
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.willEnterForegroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleWillEnterForeground()
+        }
+    }
+
+    private func handleDidEnterBackground() {
+        if backgroundTaskID == .invalid {
+            backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "ThyroCareSync") { [weak self] in
+                self?.endBackgroundTask()
+            }
+        }
+        setupAudioSession()
+        audioPlayer?.play()
+    }
+
+    private func handleWillEnterForeground() {
+        endBackgroundTask()
+        audioPlayer?.pause()
+    }
+
+    private func endBackgroundTask() {
+        if backgroundTaskID != .invalid {
+            UIApplication.shared.endBackgroundTask(backgroundTaskID)
+            backgroundTaskID = .invalid
+        }
+    }
+
+    private func startPolling() {
+        pollTask?.cancel()
+        pollTask = Task {
+            while !Task.isCancelled {
+                await CareStore.shared.synchronize()
+                try? await Task.sleep(nanoseconds: 2_500_000_000) // Poll every 2.5s
+            }
+        }
+    }
+
+    private static func createSilentWavData() -> Data {
+        var data = Data()
+        data.append(contentsOf: [0x52, 0x49, 0x46, 0x46]) // "RIFF"
+        let fileSize: UInt32 = 36 + 8000
+        withUnsafeBytes(of: fileSize.littleEndian) { data.append(contentsOf: $0) }
+        data.append(contentsOf: [0x57, 0x41, 0x56, 0x45]) // "WAVE"
+        data.append(contentsOf: [0x66, 0x6D, 0x74, 0x20]) // "fmt "
+        let subchunk1Size: UInt32 = 16
+        withUnsafeBytes(of: subchunk1Size.littleEndian) { data.append(contentsOf: $0) }
+        let audioFormat: UInt16 = 1 // PCM
+        withUnsafeBytes(of: audioFormat.littleEndian) { data.append(contentsOf: $0) }
+        let numChannels: UInt16 = 1
+        withUnsafeBytes(of: numChannels.littleEndian) { data.append(contentsOf: $0) }
+        let sampleRate: UInt32 = 8000
+        withUnsafeBytes(of: sampleRate.littleEndian) { data.append(contentsOf: $0) }
+        let byteRate: UInt32 = 8000
+        withUnsafeBytes(of: byteRate.littleEndian) { data.append(contentsOf: $0) }
+        let blockAlign: UInt16 = 1
+        withUnsafeBytes(of: blockAlign.littleEndian) { data.append(contentsOf: $0) }
+        let bitsPerSample: UInt16 = 8
+        withUnsafeBytes(of: bitsPerSample.littleEndian) { data.append(contentsOf: $0) }
+        data.append(contentsOf: [0x64, 0x61, 0x74, 0x61]) // "data"
+        let subchunk2Size: UInt32 = 8000
+        withUnsafeBytes(of: subchunk2Size.littleEndian) { data.append(contentsOf: $0) }
+        data.append(contentsOf: [UInt8](repeating: 128, count: 8000))
+        return data
+    }
+}
+
 final class CareAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        Task {
+            _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+            await CareBackgroundSyncManager.shared.start()
+        }
         return true
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        return [.banner, .badge, .sound, .list]
     }
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
         let info = response.notification.request.content.userInfo
+        if let kind = info["kind"] as? String, kind == "messages" {
+            await MainActor.run {
+                NotificationCenter.default.post(name: NSNotification.Name("ThyroCareNavigateToMessages"), object: nil)
+            }
+            return
+        }
         guard let patient = info["patientID"] as? String, let plan = info["planID"] as? String,
               let version = info["version"] as? String, let slot = info["slot"] as? String,
               let day = info["day"] as? String else { return }
